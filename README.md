@@ -1,0 +1,2 @@
+# mediamosaic
+Media viewer app
