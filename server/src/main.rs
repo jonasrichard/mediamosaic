@@ -15,7 +15,6 @@ fn main() {
         Directory::scan(arg);
     }
 
-    let repo = Repository::open();
-
-    repo.create_schema();
+    //let repo = Repository::open();
+    //repo.create_schema();
 }
