@@ -1,7 +1,6 @@
 use std::env;
 
-use image::Directory;
-use repo::Repository;
+use image::{Directory, ImageBundle};
 
 mod image;
 mod repo;
@@ -12,7 +11,13 @@ fn main() {
     if let Some(arg) = args.nth(1) {
         println!("{arg}");
 
-        Directory::scan(arg);
+        let dir = Directory::scan(arg);
+
+        dir.print();
+
+        let bundles = ImageBundle::from_directory(&dir);
+
+        bundles.first().unwrap().create_thumbnails();
     }
 
     //let repo = Repository::open();
