@@ -1,10 +1,13 @@
 use std::{
-    fs::DirEntry,
+    fs::{DirEntry, File},
+    io::BufWriter,
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     time::Instant,
 };
 
-use image::{DynamicImage, ImageReader, RgbImage};
+use image::{DynamicImage, ImageDecoder, ImageReader, RgbImage};
+use serde::Serialize;
 
 pub struct Directory {
     id: u32,
@@ -17,33 +20,55 @@ pub struct Directory {
 
 #[derive(Debug)]
 pub struct Image {
+    id: u32,
     file_path: PathBuf,
     width: u32,
     height: u32,
     size: u64,
+    thumbnail: RgbImage,
 }
 
 pub struct ImageBundle<'dir> {
-    total_width: u32,
+    id: u32,
+    file_name: String,
     height: u32,
     images: Vec<&'dir Image>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Thumbnail {
+    thumbnail_name: String,
+    position_x: u32,
+    height: u32,
+    original_name: String,
 }
 
 impl Directory {
     pub fn scan(path: impl AsRef<Path>) -> Self {
         let mut images = Vec::new();
 
-        for f in path.as_ref().read_dir().unwrap() {
-            let entry = f.unwrap();
+        let mut entries: Vec<_> = path
+            .as_ref()
+            .read_dir()
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
 
+        entries.sort_by(|e1: &DirEntry, e2: &DirEntry| {
+            e1.file_name().partial_cmp(&e2.file_name()).unwrap()
+        });
+
+        let mut id = 1u32;
+
+        for entry in &entries {
             println!("{entry:?}, {}", entry.path().ends_with("jpg"));
 
-            if Directory::is_image(&entry) {
-                images.push(Image::peek_into(&entry));
+            if Directory::is_image(entry) {
+                images.push(Image::from_path(entry, id));
+
+                id += 1;
             }
         }
-
-        images.first().map(Image::create_thumbnail);
 
         Directory {
             id: 0,
@@ -65,41 +90,60 @@ impl Directory {
         false
     }
 
-    pub fn print(&self) {
-        for img in &self.images {
-            println!("{img:?}");
+    pub fn save(&self, json_file: impl AsRef<Path>, bundles: &Vec<ImageBundle<'_>>) {
+        // TODO pull in serde and create a JSON and save to a file
+        // list of
+        //   - thumbnail name
+        //   - x position
+        //   - original image name
+        let mut thumbnails = vec![];
+
+        for image in &self.images {
+            for bundle in bundles {
+                if let Some(t) = bundle.extract_metadata(image.id) {
+                    thumbnails.push(t);
+                }
+            }
         }
+
+        let jf = File::create(json_file).unwrap();
+        let writer = BufWriter::new(jf);
+
+        serde_json::to_writer_pretty(writer, &thumbnails).unwrap();
     }
 }
 
 impl Image {
-    pub fn peek_into(entry: &DirEntry) -> Self {
-        let dim = ImageReader::open(entry.path())
-            .unwrap()
-            .into_dimensions()
-            .unwrap();
-
-        println!("{entry:?} {dim:?}");
+    pub fn from_path(entry: &DirEntry, id: u32) -> Self {
+        let path = entry.path();
+        let thumbnail = Image::create_thumbnail(&path);
 
         Image {
-            file_path: entry.path(),
-            width: dim.0,
-            height: dim.1,
-            size: entry.metadata().unwrap().len(),
+            id,
+            file_path: path,
+            width: thumbnail.width(),
+            height: thumbnail.height(),
+            size: entry.metadata().unwrap().size(),
+            thumbnail,
         }
     }
 
-    pub fn create_thumbnail(&self) -> RgbImage {
+    // TODO
+    // We need to follow a different method. We need to read the images, apply orientation,
+    // and get the dimensions, create thumbnail and start to collect them into different
+    // bundles.
+    pub fn create_thumbnail(path: impl AsRef<Path>) -> RgbImage {
         let start = Instant::now();
-        let img = ImageReader::open(&self.file_path)
-            .unwrap()
-            .decode()
-            .unwrap();
+        let mut decoder = ImageReader::open(&path).unwrap().into_decoder().unwrap();
+        let orientation = decoder.orientation().unwrap();
+        let mut img = DynamicImage::from_decoder(decoder).unwrap();
+
+        img.apply_orientation(orientation);
 
         let thumb = img.thumbnail(256, 256);
 
         if let DynamicImage::ImageRgb8(rgb_image) = thumb {
-            println!("{:?} {:?}", self.file_path, start.elapsed());
+            println!("{:?} {:?}", path.as_ref(), start.elapsed());
 
             return rgb_image;
         }
@@ -111,20 +155,36 @@ impl Image {
 impl<'dir> ImageBundle<'dir> {
     pub fn from_directory(dir: &'dir Directory) -> Vec<ImageBundle<'dir>> {
         let mut bundles: Vec<ImageBundle> = vec![];
+        let mut id = 1u32;
 
-        for image in &dir.images {
+        'outer: for image in &dir.images {
+            println!(
+                "Handling image {:?} {}x{}",
+                image.file_path.file_name(),
+                image.width,
+                image.height
+            );
+
             for bundle in bundles.iter_mut() {
                 if bundle.height == image.height && bundle.images.len() < 8 {
+                    println!("  Bundle found with height {}", bundle.height);
+
                     bundle.images.push(image);
-                    continue;
+
+                    continue 'outer;
                 }
             }
 
             let bundle = ImageBundle {
-                total_width: image.width,
+                id,
+                file_name: format!("thumbs_{id}.jpg"),
                 height: image.height,
                 images: Vec::from(&[image]),
             };
+
+            id += 1;
+
+            println!("  Bundle created with the image");
 
             bundles.push(bundle);
         }
@@ -132,18 +192,14 @@ impl<'dir> ImageBundle<'dir> {
         bundles
     }
 
-    pub fn create_thumbnails(&self) {
-        let thumbnails: Vec<RgbImage> = self
+    pub fn create_thumbnails(&self, name: impl AsRef<Path>) {
+        let total_width = self
             .images
             .iter()
-            .map(|img: &&Image| Image::create_thumbnail(img))
-            .collect();
-        let total_width = thumbnails
-            .iter()
-            .map(|i| i.width())
+            .map(|i| i.thumbnail.width())
             .reduce(|acc, e| acc + e)
             .unwrap();
-        let height = thumbnails.first().unwrap().height();
+        let height = self.images.first().unwrap().thumbnail.height();
 
         let start = Instant::now();
 
@@ -151,20 +207,47 @@ impl<'dir> ImageBundle<'dir> {
 
         let mut x_offset = 0u32;
 
-        for thumbnail in &thumbnails {
-            for y in 0..thumbnail.height() {
-                for x in 0..thumbnail.width() {
-                    thumbs.put_pixel(x + x_offset, y, *thumbnail.get_pixel(x, y));
+        for image in &self.images {
+            for y in 0..image.thumbnail.height() {
+                for x in 0..image.thumbnail.width() {
+                    thumbs.put_pixel(x + x_offset, y, *image.thumbnail.get_pixel(x, y));
                 }
             }
 
             println!("  thumb {:?}", start.elapsed());
 
-            x_offset += thumbnail.width();
+            x_offset += image.thumbnail.width();
         }
 
-        thumbs.save("./thumb.jpg").unwrap();
+        thumbs.save(name).unwrap();
 
         println!("Saved {:?}", start.elapsed());
+    }
+
+    pub fn extract_metadata(&self, id: u32) -> Option<Thumbnail> {
+        let mut offset_x = 0u32;
+
+        for (i, image) in self.images.iter().enumerate() {
+            if i != 0 {
+                offset_x += image.width;
+            }
+
+            if image.id == id {
+                return Some(Thumbnail {
+                    thumbnail_name: self.file_name.clone(),
+                    position_x: offset_x,
+                    height: self.height,
+                    original_name: image
+                        .file_path
+                        .file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .to_owned(),
+                });
+            }
+        }
+
+        None
     }
 }
