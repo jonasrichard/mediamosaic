@@ -1,9 +1,9 @@
 use std::env;
 
-use image::{Directory, ImageBundle};
+use scanner::{bundle::ImageBundle, directory::Directory};
 
-mod image;
 mod repo;
+mod scanner;
 
 fn main() {
     let mut args = env::args();
@@ -16,10 +16,6 @@ fn main() {
         let bundles = ImageBundle::from_directory(&dir);
 
         println!("{} bundles created", bundles.len());
-
-        for (i, bundle) in bundles.iter().enumerate() {
-            bundle.create_thumbnails(format!("thumb_{i}.jpg"));
-        }
 
         dir.save("first.json", &bundles);
     }
