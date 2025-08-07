@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title></title>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const divs = document.querySelectorAll("#container");
+
+        fetch("http://localhost:3000/first.json")
+          .then((response) => response.json())
+          .then((data) => {
+            data.forEach((item, index) => {
+              const div = document.createElement("div");
+              div.style.backgroundImage = `url(${item.thumbnail_name})`;
+              div.style.backgroundPosition = "-" + item.position_x + "px 0px";
+              div.style.backgroundRepeat = "no-repeat";
+              div.style.minWidth = item.width + "px";
+              div.style.height = item.height + "px";
+              div.style.display = "inline-block";
+
+              div.onclick = function () {
+                const content = document.getElementById("content");
+                content.src = "http://localhost:3000/_local/" + item.original_name;
+                content.style.display = "block";
+              };
+
+              divs[0].appendChild(div);
+            });
+          })
+          .catch((error) => console.error("Error fetching data:", error));
+      });
+    </script>
+  </head>
+
+  <body>
+    <div id="container" style="display: flex; flex-flow: row wrap;">
+      <img
+        id="content"
+        src="http://localhost:3000/"
+        alt="Background Image"
+        style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 95vw; max-height: 95vh; z-index: 1000;"
+        onclick="event.target.style.display = 'none'" />
+    </div>
+  </body>
+</html>
