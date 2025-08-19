@@ -1,25 +1,62 @@
-use std::env;
+use std::sync::Arc;
 
-use scanner::{bundle::ImageBundle, directory::Directory};
+use axum::{Router, routing::get};
+use scanner::handler::{self, SyncCommand};
+use serde::Deserialize;
+use tokio::{net::TcpListener, sync::mpsc};
 
 mod repo;
 mod scanner;
 
-fn main() {
-    let mut args = env::args();
+#[derive(Deserialize)]
+pub struct Config {
+    port: u16,
+    pub root_directory: String,
+}
 
-    if let Some(arg) = args.nth(1) {
-        println!("{arg}");
+pub struct AppState {
+    pub command_tx: mpsc::Sender<SyncCommand>,
+    pub config: Config,
+}
 
-        let dir = Directory::scan(arg);
+#[tokio::main]
+async fn main() {
+    let config = read_config();
+    let bind_addr = format!("0.0.0.0:{}", config.port);
+    let (cmd_tx, cmd_rx) = mpsc::channel(16);
 
-        let bundles = ImageBundle::from_directory(&dir);
+    tokio::spawn(async move {
+        scanner::handler::sync_directory(cmd_rx).await;
+    });
 
-        println!("{} bundles created", bundles.len());
+    let state = Arc::new(AppState {
+        command_tx: cmd_tx,
+        config,
+    });
 
-        dir.save("first.json", &bundles);
-    }
+    let app = Router::new()
+        .route(
+            "/sync",
+            get({
+                let shared_state = Arc::clone(&state);
+                move |query| handler::directory_sync_handler(query, shared_state)
+            }),
+        )
+        .route(
+            "/serve/{*path}",
+            get({
+                let shared_state = Arc::clone(&state);
+                move |path| handler::serve_content(path, shared_state)
+            }),
+        );
 
-    //let repo = Repository::open();
-    //repo.create_schema();
+    let listener = TcpListener::bind(bind_addr).await.unwrap();
+
+    axum::serve(listener, app).await.unwrap();
+}
+
+fn read_config() -> Config {
+    let cfg_file = std::fs::read_to_string("mosaic.toml").expect("Cannot find mosaic.toml");
+
+    toml::from_str(&cfg_file).expect("Error parsing mosaic.toml")
 }

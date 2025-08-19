@@ -65,7 +65,9 @@ impl Directory {
         false
     }
 
-    pub fn save(&self, json_file: impl AsRef<Path>, bundles: &Vec<ImageBundle<'_>>) {
+    pub fn save(&self, bundles: &Vec<ImageBundle<'_>>) {
+        let json_file = self.path.join("bundles.json");
+
         for bundle in bundles {
             bundle.create_thumbnails();
         }
