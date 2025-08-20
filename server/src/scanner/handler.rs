@@ -6,10 +6,8 @@ use std::{
     sync::Arc,
 };
 
-use axum::{
-    extract::{Path, Query},
-    response::IntoResponse,
-};
+use axum::extract::{Path, Query};
+use log::debug;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -24,14 +22,14 @@ pub enum SyncCommand {
 
 pub async fn sync_directory(mut commands: mpsc::Receiver<SyncCommand>) {
     while let Some(command) = commands.recv().await {
-        println!("Sync command: {command:?}");
+        debug!("Sync command: {command:?}");
 
         let SyncCommand::SyncDirectory(dir) = command;
 
         let directory = Directory::scan(dir);
         let bundles = ImageBundle::from_directory(&directory);
 
-        println!("{} bundles created", bundles.len());
+        debug!("{} bundles created", bundles.len());
 
         directory.save(&bundles);
     }
@@ -43,7 +41,7 @@ pub async fn directory_sync_handler(
 ) {
     let dir = params.get("dir").unwrap();
 
-    println!("Request to sync dir {dir}");
+    debug!("Request to sync dir {dir}");
 
     let base_path = std::path::Path::new(&state.config.root_directory);
     let full_dir = base_path.join(dir).to_str().unwrap().to_owned();
@@ -56,14 +54,14 @@ pub async fn directory_sync_handler(
 }
 
 pub async fn serve_content(Path(path): Path<String>, state: Arc<AppState>) -> String {
-    println!("Serving path: {path}");
-    println!("Root directory: {}", state.config.root_directory);
+    debug!("Serving path: {path}");
+    debug!("Root directory: {}", state.config.root_directory);
 
     let base_path = std::path::Path::new(&state.config.root_directory);
     let full_dir = base_path.join(path);
 
-    println!("  To filepath: {full_dir:?}");
-    println!("  Is dir?: {}", full_dir.is_dir());
+    debug!("  To filepath: {full_dir:?}");
+    debug!("  Is dir?: {}", full_dir.is_dir());
 
     if full_dir.is_dir() {
         list_directory(&full_dir)

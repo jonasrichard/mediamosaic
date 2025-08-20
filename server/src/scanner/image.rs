@@ -6,6 +6,7 @@ use std::{
 };
 
 use image::{DynamicImage, ImageDecoder, ImageReader, RgbImage};
+use log::debug;
 
 #[derive(Debug)]
 pub struct Image {
@@ -47,7 +48,7 @@ impl Image {
         let thumb = img.thumbnail(256, 256);
 
         if let DynamicImage::ImageRgb8(rgb_image) = thumb {
-            println!("{:?} {:?}", path.as_ref(), start.elapsed());
+            debug!("{:?} {:?}", path.as_ref(), start.elapsed());
 
             return rgb_image;
         }

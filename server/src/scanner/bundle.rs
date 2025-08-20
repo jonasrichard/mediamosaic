@@ -1,6 +1,7 @@
 use std::{path::Path, time::Instant};
 
 use image::RgbImage;
+use log::debug;
 use serde::Serialize;
 
 use super::{directory::Directory, image::Image};
@@ -36,7 +37,7 @@ impl<'dir> ImageBundle<'dir> {
 
             for bundle in bundles.iter_mut() {
                 if bundle.height == image.height && bundle.images.len() < 8 {
-                    println!("  Bundle found with height {}", bundle.height);
+                    debug!("  Bundle found with height {}", bundle.height);
 
                     bundle.images.push(image);
 
@@ -53,7 +54,7 @@ impl<'dir> ImageBundle<'dir> {
 
             id += 1;
 
-            println!("  Bundle created with the image");
+            debug!("  Bundle created with the image");
 
             bundles.push(bundle);
         }
@@ -83,14 +84,14 @@ impl<'dir> ImageBundle<'dir> {
                 }
             }
 
-            println!("  thumb {:?}", start.elapsed());
+            debug!("  thumb {:?}", start.elapsed());
 
             x_offset += image.thumbnail.width();
         }
 
         thumbs.save(&self.file_name).unwrap();
 
-        println!("Saved {:?}", start.elapsed());
+        debug!("Saved {:?}", start.elapsed());
     }
 
     pub fn extract_metadata(&self, id: u32) -> Option<Thumbnail> {

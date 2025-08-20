@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fs::File, sync::Arc};
 
 use axum::{Router, routing::get};
 use scanner::handler::{self, SyncCommand};
@@ -21,6 +21,8 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() {
+    init_logger();
+
     let config = read_config();
     let bind_addr = format!("0.0.0.0:{}", config.port);
     let (cmd_tx, cmd_rx) = mpsc::channel(16);
@@ -59,4 +61,15 @@ fn read_config() -> Config {
     let cfg_file = std::fs::read_to_string("mosaic.toml").expect("Cannot find mosaic.toml");
 
     toml::from_str(&cfg_file).expect("Error parsing mosaic.toml")
+}
+
+fn init_logger() {
+    use env_logger::Target;
+
+    let logfile = File::open("./mosaic.log").expect("Failed to open logfile");
+
+    env_logger::builder()
+        .target(Target::Pipe(Box::new(logfile)))
+        .filter_level(log::LevelFilter::Debug)
+        .init();
 }

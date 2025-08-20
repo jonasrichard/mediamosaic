@@ -5,6 +5,8 @@ use std::{
     time::Instant,
 };
 
+use log::debug;
+
 use super::{bundle::ImageBundle, image::Image};
 
 pub struct Directory {
@@ -34,7 +36,7 @@ impl Directory {
         let mut id = 1u32;
 
         for entry in &entries {
-            println!("{entry:?}, {}", entry.path().ends_with("jpg"));
+            debug!("{entry:?}, {}", entry.path().ends_with("jpg"));
 
             // TODO
             // Here we need to check if file mtime > related thumbnail file mtime
@@ -65,6 +67,9 @@ impl Directory {
         false
     }
 
+    // TODO
+    // here we also need to calculate a hash from the names of the file names
+    // and mtimes, so if someone delete a file, it should sync
     pub fn save(&self, bundles: &Vec<ImageBundle<'_>>) {
         let json_file = self.path.join("bundles.json");
 
