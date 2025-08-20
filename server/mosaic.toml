@@ -1,2 +1,3 @@
+logfile = "stdout"
 port = 3000
-root_directory = "/Users/richardjonas/tmp/mosaic"
+root_directory = "/home/richard/tmp/mosaic"

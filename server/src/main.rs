@@ -1,15 +1,16 @@
 use std::{fs::File, sync::Arc};
 
 use axum::{Router, routing::get};
+use log::info;
 use scanner::handler::{self, SyncCommand};
 use serde::Deserialize;
 use tokio::{net::TcpListener, sync::mpsc};
 
-mod repo;
 mod scanner;
 
 #[derive(Deserialize)]
 pub struct Config {
+    logfile: String,
     port: u16,
     pub root_directory: String,
 }
@@ -21,9 +22,10 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() {
-    init_logger();
-
     let config = read_config();
+
+    init_logger(&config.logfile);
+
     let bind_addr = format!("0.0.0.0:{}", config.port);
     let (cmd_tx, cmd_rx) = mpsc::channel(16);
 
@@ -54,6 +56,8 @@ async fn main() {
 
     let listener = TcpListener::bind(bind_addr).await.unwrap();
 
+    info!("Starting HTTP serve on :3000");
+
     axum::serve(listener, app).await.unwrap();
 }
 
@@ -63,13 +67,18 @@ fn read_config() -> Config {
     toml::from_str(&cfg_file).expect("Error parsing mosaic.toml")
 }
 
-fn init_logger() {
+fn init_logger(logfile: &str) {
     use env_logger::Target;
 
-    let logfile = File::open("./mosaic.log").expect("Failed to open logfile");
+    let mut builder = env_logger::builder();
 
-    env_logger::builder()
-        .target(Target::Pipe(Box::new(logfile)))
-        .filter_level(log::LevelFilter::Debug)
-        .init();
+    builder.filter_level(log::LevelFilter::Debug);
+
+    if logfile != "stdout" {
+        let logfile = File::create("./mosaic.log").expect("Failed to open logfile");
+
+        builder.target(Target::Pipe(Box::new(logfile)));
+    }
+
+    builder.init();
 }
