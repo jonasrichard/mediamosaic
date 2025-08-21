@@ -2,11 +2,11 @@ use std::{
     fs::DirEntry,
     io::{BufWriter, Cursor, Write},
     ops::Deref,
-    path::PathBuf,
+    path::Path,
     sync::Arc,
 };
 
-use axum::{body::Body, extract::Path, response::Response};
+use axum::{body::Body, extract, response::Response};
 use http::{HeaderValue, header};
 use log::debug;
 use tokio::sync::mpsc;
@@ -36,25 +36,34 @@ pub async fn sync_directory(mut commands: mpsc::Receiver<SyncCommand>) {
     }
 }
 
-pub async fn directory_sync_handler(Path(dir): Path<String>, state: Arc<AppState>) {
+pub async fn directory_sync_handler(
+    extract::Path(dir): extract::Path<String>,
+    state: Arc<AppState>,
+) {
     debug!("Request to sync dir {dir}");
 
-    let base_path = std::path::Path::new(&state.config.root_directory);
-    let full_dir = base_path.join(dir).to_str().unwrap().to_owned();
+    let base_path = Path::new(&state.config.root_directory);
+    let full_path = base_path.join(dir);
+    let full_dir = full_path.to_str().unwrap().to_owned();
 
-    state
-        .command_tx
-        .send(SyncCommand::SyncDirectory(full_dir))
-        .await
-        .expect("Failed to send internal command");
+    if !full_path.join("bundles.json").exists() {
+        state
+            .command_tx
+            .send(SyncCommand::SyncDirectory(full_dir))
+            .await
+            .expect("Failed to send internal command");
+    }
 }
 
-pub async fn serve_content(Path(dir): Path<String>, state: Arc<AppState>) -> Response<Body> {
+pub async fn serve_content(
+    extract::Path(dir): extract::Path<String>,
+    state: Arc<AppState>,
+) -> Response<Body> {
     debug!("Serving path: {dir}");
     debug!("Root directory: {}", state.config.root_directory);
 
-    let base_path = std::path::Path::new(&state.config.root_directory);
-    let mut rel_path = std::path::Path::new(&dir);
+    let base_path = Path::new(&state.config.root_directory);
+    let mut rel_path = Path::new(&dir);
 
     if rel_path.is_absolute() {
         rel_path = rel_path.strip_prefix("/").expect("Cannot join file paths");
@@ -76,7 +85,7 @@ pub async fn serve_content(Path(dir): Path<String>, state: Arc<AppState>) -> Res
 
             response
         } else {
-            list_directory(&base_path, &full_dir)
+            list_directory(base_path, &full_dir)
         }
     } else {
         debug!("  Serving file: {full_dir:?}");
@@ -85,7 +94,7 @@ pub async fn serve_content(Path(dir): Path<String>, state: Arc<AppState>) -> Res
     }
 }
 
-fn list_directory(base: &std::path::Path, dir: &PathBuf) -> Response<Body> {
+fn list_directory(base: &std::path::Path, dir: &std::path::Path) -> Response<Body> {
     let mut buffer = Cursor::new(Vec::new());
 
     let mut writer = BufWriter::new(&mut buffer);
@@ -98,22 +107,33 @@ fn list_directory(base: &std::path::Path, dir: &PathBuf) -> Response<Body> {
 
     let base_prefix = base.to_str().unwrap();
 
-    writer.write(format!("<html><body>").as_bytes()).unwrap();
+    let _ = writer.write("<html><body>".as_bytes()).unwrap();
 
     for entry in &entries {
         let entry_path = entry.path();
         let entry_link = entry_path.strip_prefix(base_prefix).unwrap();
 
-        let serve_link = std::path::Path::new("/serve").join(entry_link);
+        let serve_link = Path::new("/serve").join(entry_link);
 
         writer
             .write_fmt(format_args!(
-                "<a href=\"{}\">{:?}</a><br/>",
+                "<a href=\"{}/\">{:?}</a><br/>",
                 serve_link.to_str().unwrap(),
                 entry.file_name()
             ))
             .unwrap();
     }
+
+    debug!("  Creating index link {dir:?}");
+
+    let sync_link = Path::new("/sync").join(dir.strip_prefix(base_prefix).unwrap());
+
+    writer
+        .write_fmt(format_args!(
+            "<br><a href=\"{}/\">Index</a></body></html>",
+            sync_link.to_str().unwrap()
+        ))
+        .unwrap();
 
     drop(writer);
 
