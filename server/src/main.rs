@@ -18,7 +18,15 @@ pub struct Config {
 pub struct AppState {
     pub command_tx: mpsc::Sender<SyncCommand>,
     pub config: Config,
+    pub index_page: Arc<String>,
 }
+
+// TODO
+// create index_dir.html and index_thumbs.html
+// if in the directory there is a thumbs.json we use the index_thumbs file,
+// if there is not, let us make a directory listing with the other file.
+// We can always use fetch('./thumbs.json') to get the file from the current
+// directory
 
 #[tokio::main]
 async fn main() {
@@ -33,21 +41,24 @@ async fn main() {
         scanner::handler::sync_directory(cmd_rx).await;
     });
 
+    let index_page = include_str!("../index.html");
+
     let state = Arc::new(AppState {
         command_tx: cmd_tx,
         config,
+        index_page: Arc::new(index_page.to_string()),
     });
 
     let app = Router::new()
         .route(
-            "/sync",
+            "/sync/{*path}",
             get({
                 let shared_state = Arc::clone(&state);
-                move |query| handler::directory_sync_handler(query, shared_state)
+                move |path| handler::directory_sync_handler(path, shared_state)
             }),
         )
         .route(
-            "/serve/{*path}",
+            "/serve{*path}",
             get({
                 let shared_state = Arc::clone(&state);
                 move |path| handler::serve_content(path, shared_state)

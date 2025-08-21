@@ -862,6 +862,7 @@ version = "0.0.1"
 dependencies = [
  "axum",
  "env_logger",
+ "http",
  "image",
  "log",
  "serde",

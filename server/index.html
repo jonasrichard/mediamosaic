@@ -8,7 +8,7 @@
       document.addEventListener("DOMContentLoaded", function () {
         const divs = document.querySelectorAll("#container");
 
-        fetch("http://localhost:3000/first.json")
+        fetch("bundles.json")
           .then((response) => response.json())
           .then((data) => {
             data.forEach((item, index) => {
@@ -22,7 +22,7 @@
 
               div.onclick = function () {
                 const content = document.getElementById("content");
-                content.src = "http://localhost:3000/_local/" + item.original_name;
+                content.src = item.original_name;
                 content.style.display = "block";
               };
 
@@ -38,7 +38,6 @@
     <div id="container" style="display: flex; flex-flow: row wrap;">
       <img
         id="content"
-        src="http://localhost:3000/"
         alt="Background Image"
         style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 95vw; max-height: 95vh; z-index: 1000;"
         onclick="event.target.style.display = 'none'" />

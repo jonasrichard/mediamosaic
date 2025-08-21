@@ -1,4 +1,4 @@
-use std::{path::Path, time::Instant};
+use std::{path::PathBuf, time::Instant};
 
 use image::RgbImage;
 use log::debug;
@@ -8,6 +8,7 @@ use super::{directory::Directory, image::Image};
 
 pub struct ImageBundle<'dir> {
     id: u32,
+    base_path: PathBuf,
     file_name: String,
     height: u32,
     images: Vec<&'dir Image>,
@@ -47,6 +48,7 @@ impl<'dir> ImageBundle<'dir> {
 
             let bundle = ImageBundle {
                 id,
+                base_path: dir.path.to_path_buf(),
                 file_name: format!("thumbs_{id}.jpg"),
                 height: image.height,
                 images: Vec::from(&[image]),
@@ -89,7 +91,8 @@ impl<'dir> ImageBundle<'dir> {
             x_offset += image.thumbnail.width();
         }
 
-        thumbs.save(&self.file_name).unwrap();
+        let file_path = self.base_path.join(&self.file_name);
+        thumbs.save(&file_path).unwrap();
 
         debug!("Saved {:?}", start.elapsed());
     }
