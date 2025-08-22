@@ -21,6 +21,7 @@ pub struct Thumbnail {
     width: u32,
     height: u32,
     original_name: String,
+    file_size: u32,
 }
 
 impl<'dir> ImageBundle<'dir> {
@@ -118,6 +119,7 @@ impl<'dir> ImageBundle<'dir> {
                         .to_str()
                         .unwrap()
                         .to_owned(),
+                    file_size: image.size as u32,
                 });
             }
         }
