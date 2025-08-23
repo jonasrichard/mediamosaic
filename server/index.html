@@ -1,46 +1,112 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title></title>
     <script>
+      function displayImage(src) {
+        const content = document.getElementById("content");
+        content.src = src;
+        content.style.display = "block";
+      }
+
+      function bytesToKB(bytes) {
+        return (bytes / 1024).toFixed(2) + " KB";
+      }
+
+      function reSync() {
+        window.location.href = window.location.pathname.replace(/\/serve\/(.*$)/, "/sync/$1");
+      }
+
+      function deleteImage(path) {
+        if (confirm("Are you sure you want to delete " + path + "?")) {
+          fetch(`/delete/${path}`, {
+            method: "GET",
+          })
+            .then((response) => {
+              if (response.ok) {
+                alert("Deleted successfully");
+                location.reload();
+              } else {
+                alert("Failed to delete");
+              }
+            })
+            .catch((error) => {
+              console.error("Error:", error);
+              alert("Error occurred");
+            });
+        }
+      }
+
       document.addEventListener("DOMContentLoaded", function () {
-        const divs = document.querySelectorAll("#container");
+        const container = document.querySelectorAll("#container")[0];
 
         fetch("bundles.json")
           .then((response) => response.json())
           .then((data) => {
             data.forEach((item, index) => {
-              const div = document.createElement("div");
-              div.style.backgroundImage = `url(${item.thumbnail_name})`;
-              div.style.backgroundPosition = "-" + item.position_x + "px 0px";
-              div.style.backgroundRepeat = "no-repeat";
-              div.style.minWidth = item.width + "px";
-              div.style.height = item.height + "px";
-              div.style.display = "inline-block";
+              const content = `
+              <div class="thumbnail_box">
+                <div
+                  style="
+                    background-image: url(${item.thumbnail_name});
+                    background-position: -${item.position_x}px 0px;
+                    background-repeat: no-repeat;
+                    min-width: ${item.width}px;
+                    height: ${item.height}px;
+                    display: inline-block;
+                  "
+                  onclick="displayImage('${item.original_name}')"
+                ></div>
+                <div class="label">${bytesToKB(item.file_size)}</div>
+                <div class="label">...${item.original_name.slice(-10)}</div>
+                <div class="label"><span class="delete" onclick="deleteImage('${item.relative_base_path}${item.original_name}')">Delete</span></div>
+              </div>
+              `;
 
-              div.onclick = function () {
-                const content = document.getElementById("content");
-                content.src = item.original_name;
-                content.style.display = "block";
-              };
+              const box = document.createElement("div");
+              box.innerHTML = content;
 
-              divs[0].appendChild(div);
+              container.appendChild(box);
             });
           })
           .catch((error) => console.error("Error fetching data:", error));
       });
     </script>
+    <style type="text/css">
+      .thumbnail_box {
+        margin: 8px;
+      }
+      .label {
+        text-align: center;
+      }
+      .delete {
+        color: red;
+        cursor: pointer;
+      }
+    </style>
   </head>
 
   <body>
-    <div id="container" style="display: flex; flex-flow: row wrap;">
+    <span class="label" onclick="reSync()">Resync</span>
+    <br/>
+    <div id="container" style="display: flex; flex-flow: row wrap; gap: 16px 0">
       <img
         id="content"
         alt="Background Image"
-        style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 95vw; max-height: 95vh; z-index: 1000;"
-        onclick="event.target.style.display = 'none'" />
+        style="
+          display: none;
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          max-width: 95vw;
+          max-height: 95vh;
+          z-index: 1000;
+        "
+        onclick="event.target.style.display = 'none'"
+      />
     </div>
   </body>
 </html>

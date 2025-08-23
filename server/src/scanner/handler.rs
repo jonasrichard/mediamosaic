@@ -2,7 +2,7 @@ use std::{
     fs::DirEntry,
     io::{BufWriter, Cursor, Write},
     ops::Deref,
-    path::Path,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -13,21 +13,24 @@ use tokio::sync::mpsc;
 
 use crate::{
     AppState,
-    scanner::{bundle::ImageBundle, directory::Directory},
+    scanner::{bundle::ImageBundle, directory::ScannerContext},
 };
 
 #[derive(Debug)]
 pub enum SyncCommand {
-    SyncDirectory(String),
+    /// Sync the images in the directory. The first is the root path and the
+    /// second is the relative path inside the root.
+    SyncDirectory(PathBuf, String),
 }
 
 pub async fn sync_directory(mut commands: mpsc::Receiver<SyncCommand>) {
     while let Some(command) = commands.recv().await {
         debug!("Sync command: {command:?}");
 
-        let SyncCommand::SyncDirectory(dir) = command;
+        let SyncCommand::SyncDirectory(base_dir, relative_dir) = command;
+        let context = ScannerContext::new(&base_dir);
 
-        let directory = Directory::scan(dir);
+        let directory = context.scan(relative_dir);
         let bundles = ImageBundle::from_directory(&directory);
 
         debug!("{} bundles created", bundles.len());
@@ -42,17 +45,27 @@ pub async fn directory_sync_handler(
 ) {
     debug!("Request to sync dir {dir}");
 
-    let base_path = Path::new(&state.config.root_directory);
-    let full_path = base_path.join(dir);
-    let full_dir = full_path.to_str().unwrap().to_owned();
+    let context = ScannerContext::new(&state.config.root_directory);
+    let full_path = context.to_absolute_path(&dir);
 
-    if !full_path.join("bundles.json").exists() {
-        state
-            .command_tx
-            .send(SyncCommand::SyncDirectory(full_dir))
-            .await
-            .expect("Failed to send internal command");
+    if full_path.join("bundles.json").exists() {
+        let entries = full_path.read_dir().unwrap();
+
+        for entry in entries {
+            let entry2 = entry.unwrap();
+            let name = entry2.file_name();
+
+            if name == "bundles.json" || name.to_str().unwrap().starts_with("thumbs") {
+                std::fs::remove_file(entry2.path()).expect("Cannot remove file");
+            }
+        }
     }
+
+    state
+        .command_tx
+        .send(SyncCommand::SyncDirectory(context.base_dir, dir))
+        .await
+        .expect("Failed to send internal command");
 }
 
 pub async fn serve_content(
@@ -91,6 +104,36 @@ pub async fn serve_content(
         debug!("  Serving file: {full_dir:?}");
 
         serve_file(&full_dir)
+    }
+}
+
+pub async fn delete_image(
+    extract::Path(dir): extract::Path<String>,
+    state: Arc<AppState>,
+) -> Response<Body> {
+    let base_path = Path::new(&state.config.root_directory);
+    let full_path = base_path.join(dir);
+
+    debug!("Deleting file: {full_path:?}");
+
+    if full_path.exists() && full_path.is_file() {
+        match std::fs::remove_file(&full_path) {
+            Ok(_) => {
+                let body = Body::from(format!("Deleted file: {}", full_path.to_string_lossy()));
+                Response::builder().status(200).body(body).unwrap()
+            }
+            Err(e) => {
+                let body = Body::from(format!(
+                    "Failed to delete file: {}. Error: {}",
+                    full_path.to_string_lossy(),
+                    e
+                ));
+                Response::builder().status(500).body(body).unwrap()
+            }
+        }
+    } else {
+        let body = Body::from(format!("File not found: {}", full_path.to_string_lossy()));
+        Response::builder().status(404).body(body).unwrap()
     }
 }
 

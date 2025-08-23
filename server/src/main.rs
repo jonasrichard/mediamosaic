@@ -63,6 +63,13 @@ async fn main() {
                 let shared_state = Arc::clone(&state);
                 move |path| handler::serve_content(path, shared_state)
             }),
+        )
+        .route(
+            "/delete/{*path}",
+            get({
+                let shared_state = Arc::clone(&state);
+                move |path| scanner::handler::delete_image(path, shared_state)
+            }),
         );
 
     let listener = TcpListener::bind(bind_addr).await.unwrap();

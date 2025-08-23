@@ -8,7 +8,8 @@ use super::{directory::Directory, image::Image};
 
 pub struct ImageBundle<'dir> {
     id: u32,
-    base_path: PathBuf,
+    absolute_path: PathBuf,
+    relative_path: PathBuf,
     file_name: String,
     height: u32,
     images: Vec<&'dir Image>,
@@ -16,6 +17,8 @@ pub struct ImageBundle<'dir> {
 
 #[derive(Debug, Serialize)]
 pub struct Thumbnail {
+    relative_base_path: String,
+    absolute_base_path: String,
     thumbnail_name: String,
     position_x: u32,
     width: u32,
@@ -49,7 +52,8 @@ impl<'dir> ImageBundle<'dir> {
 
             let bundle = ImageBundle {
                 id,
-                base_path: dir.path.to_path_buf(),
+                absolute_path: dir.absolute_path.clone(),
+                relative_path: dir.relative_path.clone(),
                 file_name: format!("thumbs_{id}.jpg"),
                 height: image.height,
                 images: Vec::from(&[image]),
@@ -92,7 +96,7 @@ impl<'dir> ImageBundle<'dir> {
             x_offset += image.thumbnail.width();
         }
 
-        let file_path = self.base_path.join(&self.file_name);
+        let file_path = self.absolute_path.join(&self.file_name);
         thumbs.save(&file_path).unwrap();
 
         debug!("Saved {:?}", start.elapsed());
@@ -108,6 +112,8 @@ impl<'dir> ImageBundle<'dir> {
 
             if image.id == id {
                 return Some(Thumbnail {
+                    absolute_base_path: self.absolute_path.to_str().unwrap().to_owned(),
+                    relative_base_path: self.relative_path.to_str().unwrap().to_owned(),
                     thumbnail_name: self.file_name.clone(),
                     position_x: offset_x,
                     width: image.width,
