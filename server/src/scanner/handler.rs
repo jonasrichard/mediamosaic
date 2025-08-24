@@ -150,7 +150,16 @@ fn list_directory(base: &std::path::Path, dir: &std::path::Path) -> Response<Bod
 
     let base_prefix = base.to_str().unwrap();
 
+    let relative_parent = base.parent().unwrap().to_str().unwrap();
+
     let _ = writer.write("<html><body>".as_bytes()).unwrap();
+
+    writer
+        .write_fmt(format_args!(
+            "<a href=\"/serve/{:?}\">Parent</a><br/>",
+            relative_parent
+        ))
+        .unwrap();
 
     for entry in &entries {
         let entry_path = entry.path();

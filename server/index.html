@@ -9,8 +9,6 @@
     <script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
     <script>
         function displayImage(src) {
-            console.log("Displaying image:", src);
-
             const mainImage = document.getElementById('main-image');
             mainImage.src = src;
             mainImage.style.display = 'block';
@@ -21,10 +19,35 @@
 
         function deleteImage(item) {
             console.log("Deleting item:", item);
+            if (confirm(`Are you sure you want to delete ${item.original_name}?`)) {
+                fetch(`/delete/${item.relative_base_path}${item.original_name}`)
+                    .then(data => {
+                        console.log(data);
+                    })
+                    .catch(error => {
+                        console.error("Error resyncing:", error);
+                    });
+            }
         }
 
         function resync(baseDir) {
             console.log("Resyncing directory:", baseDir);
+            fetch(`/sync/${baseDir}`)
+                .then(data => {
+                    console.log(data);
+                })
+                .catch(error => {
+                    console.error("Error resyncing:", error);
+                });
+        }
+
+        function parentPath(baseDir) {
+            var p = baseDir.split("/");
+
+            p.pop();
+            p.pop();
+
+            return p.join("/");
         }
 
         function bytesToKB(bytes) {
@@ -63,11 +86,14 @@
                     });
             }, []);
 
+            const parent = parentPath(baseDir);
+
             directoryInfo = preact.h('div', { style: { marginBottom: '20px' } },
                 preact.h('h2', null, 'Image Gallery'),
                 preact.h('p', null, `Total Size: ${bytesToKB(totalSize)}`),
                 preact.h('p', null, 'Click on a thumbnail to view the full image. Click on the full image to close it.'),
-                preact.h('span', { onclick: () => resync(baseDir) }, "Resync")
+                preact.h('span', { onclick: () => resync(baseDir) }, "Resync"),
+                preact.h('a', { href: `/serve/${parent}/` }, "Parent directory"),
             );
 
             thumbnailPanel = preact.h('div', { id: "thumbnails" }, null);
