@@ -1,112 +1,164 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title></title>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="https://unpkg.com/preact@10.19.6/dist/preact.umd.js"></script>
+    <script src="https://unpkg.com/preact@10.19.6/hooks/dist/hooks.umd.js"></script>
+    <script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
     <script>
-      function displayImage(src) {
-        const content = document.getElementById("content");
-        content.src = src;
-        content.style.display = "block";
-      }
+        function displayImage(src) {
+            console.log("Displaying image:", src);
 
-      function bytesToKB(bytes) {
-        return (bytes / 1024).toFixed(2) + " KB";
-      }
-
-      function reSync() {
-        window.location.href = window.location.pathname.replace(/\/serve\/(.*$)/, "/sync/$1");
-      }
-
-      function deleteImage(path) {
-        if (confirm("Are you sure you want to delete " + path + "?")) {
-          fetch(`/delete/${path}`, {
-            method: "GET",
-          })
-            .then((response) => {
-              if (response.ok) {
-                alert("Deleted successfully");
-                location.reload();
-              } else {
-                alert("Failed to delete");
-              }
-            })
-            .catch((error) => {
-              console.error("Error:", error);
-              alert("Error occurred");
-            });
+            const mainImage = document.getElementById('main-image');
+            mainImage.src = src;
+            mainImage.style.display = 'block';
+            mainImage.onclick = () => {
+                mainImage.style.display = 'none';
+            };
         }
-      }
 
-      document.addEventListener("DOMContentLoaded", function () {
-        const container = document.querySelectorAll("#container")[0];
+        function deleteImage(item) {
+            console.log("Deleting item:", item);
+        }
 
-        fetch("bundles.json")
-          .then((response) => response.json())
-          .then((data) => {
-            data.forEach((item, index) => {
-              const content = `
-              <div class="thumbnail_box">
-                <div
-                  style="
-                    background-image: url(${item.thumbnail_name});
-                    background-position: -${item.position_x}px 0px;
-                    background-repeat: no-repeat;
-                    min-width: ${item.width}px;
-                    height: ${item.height}px;
-                    display: inline-block;
-                  "
-                  onclick="displayImage('${item.original_name}')"
-                ></div>
-                <div class="label">${bytesToKB(item.file_size)}</div>
-                <div class="label">...${item.original_name.slice(-10)}</div>
-                <div class="label"><span class="delete" onclick="deleteImage('${item.relative_base_path}${item.original_name}')">Delete</span></div>
-              </div>
-              `;
+        function resync(baseDir) {
+            console.log("Resyncing directory:", baseDir);
+        }
 
-              const box = document.createElement("div");
-              box.innerHTML = content;
+        function bytesToKB(bytes) {
+            return (bytes / 1024).toFixed(2) + " KB";
+        }
 
-              container.appendChild(box);
+        function App() {
+            const [totalSize, setTotalSize] = preactHooks.useState(0);
+            const [baseDir, setBaseDir] = preactHooks.useState('');
+
+            preactHooks.useEffect(() => {
+                fetch('bundles.json')
+                    .then(response => response.json())
+                    .then(data => {
+                        var size = 0;
+
+                        thumbnails = data;
+                        console.log(thumbnails);
+
+                        const thumbnailElements = thumbnails.map((item, index) => {
+                            if (index === 0) {
+                                setBaseDir(item.relative_base_path);
+                            }
+
+                            size += item.file_size;
+
+                            return preact.h(Thumbnail, { key: index, thumbnail_name: item.thumbnail_name, item: item });
+                        });
+
+                        setTotalSize(size);
+
+                        preact.render(preact.h('div', null, thumbnailElements), document.getElementById('thumbnails'))
+                    })
+                    .catch(error => {
+                        console.error('Error fetching bundles:', error);
+                    });
+            }, []);
+
+            directoryInfo = preact.h('div', { style: { marginBottom: '20px' } },
+                preact.h('h2', null, 'Image Gallery'),
+                preact.h('p', null, `Total Size: ${bytesToKB(totalSize)}`),
+                preact.h('p', null, 'Click on a thumbnail to view the full image. Click on the full image to close it.'),
+                preact.h('span', { onclick: () => resync(baseDir) }, "Resync")
+            );
+
+            thumbnailPanel = preact.h('div', { id: "thumbnails" }, null);
+
+            mainImage = preact.h('img', {
+                id: "main-image",
+                style: {
+                    display: "none",
+                    position: "fixed",
+                    top: "50%",
+                    left: "50%",
+                    transform: "translate(-50%, -50%)",
+                    maxWidth: "95vw",
+                    maxHeight: "95vh",
+                    zIndex: "1000",
+                }
+            }, null);
+
+            return preact.h('div', { id: "container"}, directoryInfo, thumbnailPanel, mainImage);
+        }
+
+        function Thumbnail(props) {
+            thumbnailImage = preact.h('div', {
+                className: 'thumbnail',
+                style: {
+                    backgroundImage: `url(${props.item.thumbnail_name})`,
+                    backgroundPosition: `-${props.item.position_x}px 0px`,
+                    backgroundRepeat: 'no-repeat',
+                    minWidth: `${props.item.width}px`,
+                    height: `${props.item.height}px`,
+                    display: 'inline-block',
+                },
+                onclick: () => displayImage(props.item.original_name)
             });
-          })
-          .catch((error) => console.error("Error fetching data:", error));
-      });
+
+            thumbnailBox = preact.h('div', {
+                    style: {
+                        display: 'inline-block',
+                        textAlign: 'center',
+                        fontSize: '12px',
+                        marginBottom: '10px',
+                    }
+                }, thumbnailImage,
+                preact.h('div', null, props.item.original_name.slice(-10)),
+                preact.h('div', null, `${bytesToKB(props.item.file_size)}`),
+                preact.h(
+                    'div',
+                    {
+                        style: { cursor: "pointer" },
+                        onclick: () => deleteImage(props.item)
+                    },
+                    "Delete"
+                )
+            );
+
+            return thumbnailBox;
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            preact.render(preact.h(App, null), document.body);
+
+        });
     </script>
     <style type="text/css">
-      .thumbnail_box {
-        margin: 8px;
-      }
-      .label {
-        text-align: center;
-      }
-      .delete {
-        color: red;
-        cursor: pointer;
-      }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        #container {
+            max-width: 800px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #thumbnails {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .thumbnail {
+            width: 150px;
+            height: 150px;
+            background-size: cover;
+            background-position: center;
+            border: 1px solid #ccc;
+        }
     </style>
-  </head>
-
-  <body>
-    <span class="label" onclick="reSync()">Resync</span>
-    <br/>
-    <div id="container" style="display: flex; flex-flow: row wrap; gap: 16px 0">
-      <img
-        id="content"
-        alt="Background Image"
-        style="
-          display: none;
-          position: fixed;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          max-width: 95vw;
-          max-height: 95vh;
-          z-index: 1000;
-        "
-        onclick="event.target.style.display = 'none'"
-      />
-    </div>
-  </body>
+</head>
+<body>
+</body>
 </html>
