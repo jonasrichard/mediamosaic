@@ -89,7 +89,8 @@ pub async fn serve_content(
 
     if full_dir.is_dir() {
         if full_dir.join("bundles.json").exists() {
-            let body: Body = Body::new(state.index_page.deref().to_owned());
+            let gallery_page = std::fs::read_to_string(&state.config.gallery_index).unwrap();
+            let body: Body = Body::new(gallery_page);
             let mut response: Response<Body> = Response::builder().body(body).unwrap();
 
             response

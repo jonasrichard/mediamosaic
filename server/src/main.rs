@@ -10,6 +10,7 @@ mod scanner;
 
 #[derive(Deserialize)]
 pub struct Config {
+    pub gallery_index: String,
     logfile: String,
     port: u16,
     pub root_directory: String,
@@ -18,7 +19,6 @@ pub struct Config {
 pub struct AppState {
     pub command_tx: mpsc::Sender<SyncCommand>,
     pub config: Config,
-    pub index_page: Arc<String>,
 }
 
 // TODO
@@ -41,12 +41,9 @@ async fn main() {
         scanner::handler::sync_directory(cmd_rx).await;
     });
 
-    let index_page = include_str!("../index.html");
-
     let state = Arc::new(AppState {
         command_tx: cmd_tx,
         config,
-        index_page: Arc::new(index_page.to_string()),
     });
 
     let app = Router::new()
