@@ -1,6 +1,9 @@
 use std::{fs::File, sync::Arc};
 
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 use log::info;
 use scanner::handler::{self, SyncCommand};
 use serde::Deserialize;
@@ -66,6 +69,13 @@ async fn main() {
             get({
                 let shared_state = Arc::clone(&state);
                 move |path| scanner::handler::delete_image(path, shared_state)
+            }),
+        )
+        .route(
+            "/delete",
+            post({
+                let shared_state = Arc::clone(&state);
+                move |body| scanner::handler::delete_images(shared_state, body)
             }),
         );
 

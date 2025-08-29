@@ -1,190 +1,258 @@
 <!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Document</title>
     <script src="https://unpkg.com/preact@10.19.6/dist/preact.umd.js"></script>
     <script src="https://unpkg.com/preact@10.19.6/hooks/dist/hooks.umd.js"></script>
     <script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
     <script>
-        function displayImage(src) {
-            const mainImage = document.getElementById('main-image');
-            mainImage.src = src;
-            mainImage.style.display = 'block';
-            mainImage.onclick = () => {
-                mainImage.style.display = 'none';
-            };
+      function displayImage(src) {
+        const mainImage = document.getElementById("main-image");
+        mainImage.src = src;
+        mainImage.style.display = "block";
+        mainImage.onclick = () => {
+          mainImage.style.display = "none";
+        };
+      }
+
+      function deleteImage(item) {
+        console.log("Deleting item:", item);
+        if (confirm(`Are you sure you want to delete ${item.original_name}?`)) {
+          fetch(`/delete/${item.relative_base_path}${item.original_name}`)
+            .then((data) => {
+              console.log(data);
+            })
+            .catch((error) => {
+              console.error("Error resyncing:", error);
+            });
         }
+      }
 
-        function deleteImage(item) {
-            console.log("Deleting item:", item);
-            if (confirm(`Are you sure you want to delete ${item.original_name}?`)) {
-                fetch(`/delete/${item.relative_base_path}${item.original_name}`)
-                    .then(data => {
-                        console.log(data);
-                    })
-                    .catch(error => {
-                        console.error("Error resyncing:", error);
-                    });
-            }
+      function deleteImages(thumbnails) {
+        const toDelete = thumbnails
+          .filter((t) => {
+            return t.selected;
+          })
+          .map((t) => t.relative_base_path + t.original_name);
+
+        if (
+          confirm(`Are you sure you want to delete ${toDelete.length} files?`)
+        ) {
+          fetch("/delete", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(toDelete),
+          })
+            .then((result) => {
+              console.log("Delete result", result);
+            })
+            .catch((error) => {
+              console.error("Error during deleting:", error);
+            });
         }
+      }
 
-        function resync(baseDir) {
-            console.log("Resyncing directory:", baseDir);
-            fetch(`/sync/${baseDir}`)
-                .then(data => {
-                    console.log(data);
-                })
-                .catch(error => {
-                    console.error("Error resyncing:", error);
-                });
-        }
+      function resync(baseDir) {
+        console.log("Resyncing directory:", baseDir);
+        fetch(`/sync/${baseDir}`)
+          .then((data) => {
+            console.log(data);
+          })
+          .catch((error) => {
+            console.error("Error resyncing:", error);
+          });
+      }
 
-        function parentPath(baseDir) {
-            var p = baseDir.split("/");
+      function parentPath(baseDir) {
+        var p = baseDir.split("/");
 
-            p.pop();
-            p.pop();
+        p.pop();
+        p.pop();
 
-            return p.join("/");
-        }
+        return p.join("/");
+      }
 
-        function bytesToKB(bytes) {
-            return (bytes / 1024).toFixed(2) + " KB";
-        }
+      function bytesToKB(bytes) {
+        return (bytes / 1024).toFixed(2) + " KB";
+      }
 
-        function App() {
-            const [totalSize, setTotalSize] = preactHooks.useState(0);
-            const [baseDir, setBaseDir] = preactHooks.useState('');
+      function App() {
+        const [thumbnails, setThumbnails] = preactHooks.useState([]);
+        const [totalSize, setTotalSize] = preactHooks.useState(0);
+        const [count, setCount] = preactHooks.useState(0);
+        const [baseDir, setBaseDir] = preactHooks.useState("");
 
-            preactHooks.useEffect(() => {
-                fetch('bundles.json')
-                    .then(response => response.json())
-                    .then(data => {
-                        var size = 0;
+        preactHooks.useEffect(() => {
+          fetch("bundles.json")
+            .then((response) => response.json())
+            .then((data) => {
+              setThumbnails(data);
+              setCount(data.length);
+              setTotalSize(data.reduce((acc, e) => acc + e.file_size, 0));
+            })
+            .catch((error) => {
+              console.error("Error fetching bundles:", error);
+            });
+        }, []);
 
-                        thumbnails = data;
-                        console.log(thumbnails);
+        const parent = parentPath(baseDir);
 
-                        const thumbnailElements = thumbnails.map((item, index) => {
-                            if (index === 0) {
-                                setBaseDir(item.relative_base_path);
-                            }
+        directoryInfo = preact.h(
+          "div",
+          { style: { marginBottom: "20px" } },
+          preact.h("h2", null, "Image Gallery"),
+          preact.h("p", null, `Total Size: ${bytesToKB(totalSize)} (${count})`),
+          preact.h(
+            "p",
+            null,
+            "Click on a thumbnail to view the full image. Click on the full image to close it.",
+          ),
+          preact.h("button", { onclick: () => resync(baseDir) }, "Resync"),
+          preact.h(
+            "button",
+            { onclick: () => deleteImages(thumbnails) },
+            "Delete selected",
+          ),
+          preact.h("a", { href: `/serve/${parent}/` }, "Parent directory"),
+        );
+        // TODO calculate total of size and count
 
-                            size += item.file_size;
+        // Create thumbnails
+        const thumbnailChildren = thumbnails.map((item, index) => {
+          item.select = () => {
+            let newThumbnails = thumbnails.map((t, i) => {
+              const newThumbnail = { ...t };
+              if (item.original_name == t.original_name) {
+                newThumbnail.selected = !newThumbnail.selected;
+              }
 
-                            return preact.h(Thumbnail, { key: index, thumbnail_name: item.thumbnail_name, item: item });
-                        });
-
-                        setTotalSize(size);
-
-                        preact.render(preact.h('div', null, thumbnailElements), document.getElementById('thumbnails'))
-                    })
-                    .catch(error => {
-                        console.error('Error fetching bundles:', error);
-                    });
-            }, []);
-
-            const parent = parentPath(baseDir);
-
-            directoryInfo = preact.h('div', { style: { marginBottom: '20px' } },
-                preact.h('h2', null, 'Image Gallery'),
-                preact.h('p', null, `Total Size: ${bytesToKB(totalSize)}`),
-                preact.h('p', null, 'Click on a thumbnail to view the full image. Click on the full image to close it.'),
-                preact.h('span', { onclick: () => resync(baseDir) }, "Resync"),
-                preact.h('a', { href: `/serve/${parent}/` }, "Parent directory"),
-            );
-
-            thumbnailPanel = preact.h('div', { id: "thumbnails" }, null);
-
-            mainImage = preact.h('img', {
-                id: "main-image",
-                style: {
-                    display: "none",
-                    position: "fixed",
-                    top: "50%",
-                    left: "50%",
-                    transform: "translate(-50%, -50%)",
-                    maxWidth: "95vw",
-                    maxHeight: "95vh",
-                    zIndex: "1000",
-                }
-            }, null);
-
-            return preact.h('div', { id: "container"}, directoryInfo, thumbnailPanel, mainImage);
-        }
-
-        function Thumbnail(props) {
-            thumbnailImage = preact.h('div', {
-                className: 'thumbnail',
-                style: {
-                    backgroundImage: `url(${props.item.thumbnail_name})`,
-                    backgroundPosition: `-${props.item.position_x}px 0px`,
-                    backgroundRepeat: 'no-repeat',
-                    minWidth: `${props.item.width}px`,
-                    height: `${props.item.height}px`,
-                    display: 'inline-block',
-                },
-                onclick: () => displayImage(props.item.original_name)
+              return newThumbnail;
             });
 
-            thumbnailBox = preact.h('div', {
-                    style: {
-                        display: 'inline-block',
-                        textAlign: 'center',
-                        fontSize: '12px',
-                        marginBottom: '10px',
-                    }
-                }, thumbnailImage,
-                preact.h('div', null, props.item.original_name.slice(-10)),
-                preact.h('div', null, `${bytesToKB(props.item.file_size)}`),
-                preact.h(
-                    'div',
-                    {
-                        style: { cursor: "pointer" },
-                        onclick: () => deleteImage(props.item)
-                    },
-                    "Delete"
-                )
-            );
+            setThumbnails(newThumbnails);
+          };
 
-            return thumbnailBox;
-        }
-
-        document.addEventListener("DOMContentLoaded", function() {
-            preact.render(preact.h(App, null), document.body);
-
+          return preact.h(Thumbnail, {
+            key: index,
+            thumbnail_name: item.thumbnail_name,
+            item: item,
+          });
         });
+
+        thumbnailPanel = preact.h(
+          "div",
+          { id: "thumbnails" },
+          thumbnailChildren,
+        );
+
+        mainImage = preact.h(
+          "img",
+          {
+            id: "main-image",
+            style: {
+              display: "none",
+              position: "fixed",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              maxWidth: "95vw",
+              maxHeight: "95vh",
+              zIndex: "1000",
+            },
+          },
+          null,
+        );
+
+        return preact.h(
+          "div",
+          { id: "container" },
+          directoryInfo,
+          thumbnailPanel,
+          mainImage,
+        );
+      }
+
+      function Thumbnail(props) {
+        const [selected, setSelected] = preactHooks.useState(false);
+
+        thumbnailImage = preact.h("div", {
+          className: "thumbnail",
+          style: {
+            backgroundImage: `url(${props.item.thumbnail_name})`,
+            backgroundPosition: `-${props.item.position_x}px 0px`,
+            backgroundRepeat: "no-repeat",
+            minWidth: `${props.item.width}px`,
+            height: `${props.item.height}px`,
+            display: "inline-block",
+          },
+          onclick: () => displayImage(props.item.original_name),
+        });
+
+        thumbnailBox = preact.h(
+          "div",
+          {
+            style: {
+              display: "inline-block",
+              textAlign: "center",
+              fontSize: "12px",
+              marginBottom: "10px",
+              backgroundColor: selected ? "#dd8c8c" : "",
+            },
+          },
+          thumbnailImage,
+          preact.h("div", null, props.item.original_name.slice(-10)),
+          preact.h("div", null, `${bytesToKB(props.item.file_size)}`),
+          preact.h(
+            "div",
+            {
+              style: { cursor: "pointer" },
+              onclick: () => {
+                setSelected(!selected);
+                props.item.select();
+              },
+            },
+            "Select",
+          ),
+        );
+
+        return thumbnailBox;
+      }
+
+      document.addEventListener("DOMContentLoaded", function () {
+        preact.render(preact.h(App, null), document.body);
+      });
     </script>
     <style type="text/css">
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f4f4f4;
-        }
-        #container {
-            max-width: 800px;
-            margin: auto;
-            background: white;
-            padding: 20px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        #thumbnails {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .thumbnail {
-            width: 150px;
-            height: 150px;
-            background-size: cover;
-            background-position: center;
-            border: 1px solid #ccc;
-        }
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      #container {
+        max-width: 800px;
+        margin: auto;
+        background: white;
+        padding: 20px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+      #thumbnails {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .thumbnail {
+        width: 150px;
+        height: 150px;
+        background-size: cover;
+        background-position: center;
+        border: 1px solid #ccc;
+      }
     </style>
-</head>
-<body>
-</body>
+  </head>
+  <body></body>
 </html>

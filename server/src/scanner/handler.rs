@@ -6,9 +6,9 @@ use std::{
     sync::Arc,
 };
 
-use axum::{body::Body, extract, response::Response};
+use axum::{Json, body::Body, extract, response::Response};
 use http::{HeaderValue, header};
-use log::debug;
+use log::{debug, info};
 use tokio::sync::mpsc;
 
 use crate::{
@@ -136,6 +136,38 @@ pub async fn delete_image(
         let body = Body::from(format!("File not found: {}", full_path.to_string_lossy()));
         Response::builder().status(404).body(body).unwrap()
     }
+}
+
+pub async fn delete_images(
+    state: Arc<AppState>,
+    Json(payload): Json<serde_json::Value>,
+) -> Response<Body> {
+    if let serde_json::Value::Array(files) = payload {
+        info!("Files to delete: {files:?}");
+
+        let base_path = Path::new(&state.config.root_directory);
+
+        for file in files {
+            if let serde_json::Value::String(file_str) = file {
+                let full_path = base_path.join(&file_str);
+
+                if full_path.exists() && full_path.is_file() {
+                    match std::fs::remove_file(&full_path) {
+                        Ok(_) => info!("Deleted file: {}", full_path.to_string_lossy()),
+                        Err(e) => info!(
+                            "Failed to delete file: {}. Error: {}",
+                            full_path.to_string_lossy(),
+                            e
+                        ),
+                    }
+                } else {
+                    info!("File not found: {}", full_path.to_string_lossy());
+                }
+            }
+        }
+    }
+
+    Response::builder().body("".into()).unwrap()
 }
 
 fn list_directory(base: &std::path::Path, dir: &std::path::Path) -> Response<Body> {

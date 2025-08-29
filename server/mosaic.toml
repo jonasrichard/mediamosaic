@@ -1,3 +1,4 @@
+gallery_index = "./gallery_index.html"
 logfile = "stdout"
 port = 3000
 root_directory = "/Users/richardjonas/tmp/mosaic"
