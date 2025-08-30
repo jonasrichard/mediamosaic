@@ -1,7 +1,6 @@
 use std::{
-    fs::DirEntry,
+    fs::{DirEntry, File},
     io::{BufWriter, Cursor, Write},
-    ops::Deref,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -13,7 +12,10 @@ use tokio::sync::mpsc;
 
 use crate::{
     AppState,
-    scanner::{bundle::ImageBundle, directory::ScannerContext},
+    scanner::{
+        bundle::{ImageBundle, Thumbnail},
+        directory::ScannerContext,
+    },
 };
 
 #[derive(Debug)]
@@ -142,32 +144,80 @@ pub async fn delete_images(
     state: Arc<AppState>,
     Json(payload): Json<serde_json::Value>,
 ) -> Response<Body> {
+    // TODO delete the files from bundles.json at least, so that the UI should
+    // not pick up those thumbnails
     if let serde_json::Value::Array(files) = payload {
         info!("Files to delete: {files:?}");
 
         let base_path = Path::new(&state.config.root_directory);
 
-        for file in files {
-            if let serde_json::Value::String(file_str) = file {
-                let full_path = base_path.join(&file_str);
-
-                if full_path.exists() && full_path.is_file() {
-                    match std::fs::remove_file(&full_path) {
-                        Ok(_) => info!("Deleted file: {}", full_path.to_string_lossy()),
-                        Err(e) => info!(
-                            "Failed to delete file: {}. Error: {}",
-                            full_path.to_string_lossy(),
-                            e
-                        ),
-                    }
+        let files_to_delete: Vec<String> = files
+            .iter()
+            .filter_map(|v| {
+                if let serde_json::Value::String(s) = v {
+                    Some(s.clone())
                 } else {
-                    info!("File not found: {}", full_path.to_string_lossy());
+                    None
                 }
+            })
+            .collect();
+
+        let mut current_dir = None;
+
+        for file in &files_to_delete {
+            let full_path = base_path.join(&file);
+
+            if current_dir.is_none() {
+                current_dir = full_path.parent().map(|p| p.to_path_buf());
             }
+
+            if full_path.exists() && full_path.is_file() {
+                match std::fs::remove_file(&full_path) {
+                    Ok(_) => info!("Deleted file: {}", full_path.to_string_lossy()),
+                    Err(e) => info!(
+                        "Failed to delete file: {}. Error: {}",
+                        full_path.to_string_lossy(),
+                        e
+                    ),
+                }
+            } else {
+                info!("File not found: {}", full_path.to_string_lossy());
+            }
+        }
+
+        if let Some(mut current_dir) = current_dir {
+            info!("Current dir: {current_dir:?}");
+            current_dir.push("bundles.json");
+            update_bundles_file(&current_dir, &files_to_delete);
         }
     }
 
     Response::builder().body("".into()).unwrap()
+}
+
+fn update_bundles_file(bundles_path: &PathBuf, dirs_to_delete: &Vec<String>) {
+    info!("Updating bundles file: {bundles_path:?}");
+
+    let content = std::fs::read_to_string(bundles_path).unwrap();
+    let thumbnails: Vec<Thumbnail> = serde_json::from_str(&content).unwrap();
+
+    let mut new_thumbnails = vec![];
+
+    for t in thumbnails {
+        let mut path = t.relative_base_path.clone();
+        path.push_str(&t.original_name);
+
+        info!("  Check if {path} is in dir list");
+
+        if !dirs_to_delete.contains(&path) {
+            new_thumbnails.push(t);
+        }
+    }
+
+    let jf = File::create(bundles_path).unwrap();
+    let writer = BufWriter::new(jf);
+
+    serde_json::to_writer_pretty(writer, &new_thumbnails).unwrap();
 }
 
 fn list_directory(base: &std::path::Path, dir: &std::path::Path) -> Response<Body> {

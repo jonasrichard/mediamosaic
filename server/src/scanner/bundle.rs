@@ -2,7 +2,7 @@ use std::{path::PathBuf, time::Instant};
 
 use image::RgbImage;
 use log::debug;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::{directory::Directory, image::Image};
 
@@ -15,15 +15,15 @@ pub struct ImageBundle<'dir> {
     images: Vec<&'dir Image>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Thumbnail {
-    relative_base_path: String,
+    pub relative_base_path: String,
     absolute_base_path: String,
     thumbnail_name: String,
     position_x: u32,
     width: u32,
     height: u32,
-    original_name: String,
+    pub original_name: String,
     file_size: u32,
 }
 
