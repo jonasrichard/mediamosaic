@@ -4,10 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Document</title>
-    <script src="https://unpkg.com/preact@10.19.6/dist/preact.umd.js"></script>
-    <script src="https://unpkg.com/preact@10.19.6/hooks/dist/hooks.umd.js"></script>
+    <script src="https://unpkg.com/preact@10.27.2/dist/preact.umd.js"></script>
+    <script src="https://unpkg.com/preact@10.27.2/hooks/dist/hooks.umd.js"></script>
     <script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
     <script>
+      function handleEscape(event) {
+        if (event.key === "Escape") {
+          const mainImage = document.getElementById("main-image");
+          mainImage.style.display = "none";
+        }
+      }
+
       function displayImage(src) {
         const mainImage = document.getElementById("main-image");
         mainImage.src = src;
@@ -85,6 +92,7 @@
         const [totalSize, setTotalSize] = preactHooks.useState(0);
         const [count, setCount] = preactHooks.useState(0);
         const [baseDir, setBaseDir] = preactHooks.useState("");
+        const [currentIndex, setCurrentIndex] = preactHooks.useState(-1);
 
         preactHooks.useEffect(() => {
           fetch("bundles.json")
@@ -99,7 +107,61 @@
             });
         }, []);
 
+        // keyboard handlers for navigation and selection
+        preactHooks.useEffect(() => {
+          function handleKey(e) {
+            if (e.key === "ArrowLeft") {
+              prev();
+            } else if (e.key === "ArrowRight") {
+              next();
+            } else if (e.key === "s" || e.key === "S") {
+              toggleSelectAtIndex(currentIndex);
+            } else if (e.key === "Escape") {
+              setCurrentIndex(-1);
+            }
+          }
+
+          window.addEventListener("keydown", handleKey);
+          return () => window.removeEventListener("keydown", handleKey);
+        }, [currentIndex, thumbnails]);
+
         const parent = parentPath(baseDir);
+
+        function openImage(index) {
+          if (!thumbnails || thumbnails.length === 0) return;
+          if (index < 0 || index >= thumbnails.length) return;
+          setCurrentIndex(index);
+        }
+
+        function prev() {
+          if (!thumbnails || thumbnails.length === 0) return;
+          const newIndex =
+            currentIndex <= 0 ? thumbnails.length - 1 : currentIndex - 1;
+          setCurrentIndex(newIndex);
+        }
+
+        function next() {
+          if (!thumbnails || thumbnails.length === 0) return;
+          const newIndex =
+            currentIndex === -1 || currentIndex >= thumbnails.length - 1
+              ? 0
+              : currentIndex + 1;
+          setCurrentIndex(newIndex);
+        }
+
+        function toggleSelectAtIndex(index) {
+          if (index < 0 || index >= thumbnails.length) return;
+          const newThumbnails = thumbnails.map((t, i) =>
+            i === index ? { ...t, selected: !t.selected } : t,
+          );
+          setThumbnails(newThumbnails);
+        }
+
+        // if currentIndex >= 0 show the corresponding full image
+        const mainSrc =
+          currentIndex >= 0 && thumbnails[currentIndex]
+            ? thumbnails[currentIndex].original_name
+            : null;
 
         directoryInfo = preact.h(
           "div",
@@ -118,28 +180,34 @@
             "Delete selected",
           ),
           preact.h("a", { href: `/serve/${parent}/` }, "Parent directory"),
+          preact.h(
+            "p",
+            null,
+            "Keyboard: ← Previous, → Next, S Select/Deselect, Esc Close",
+          ),
+          // Prev/Next buttons
+          preact.h(
+            "div",
+            null,
+            preact.h(
+              "button",
+              { onclick: prev, style: { marginRight: "8px" } },
+              "Prev",
+            ),
+            preact.h("button", { onclick: next }, "Next"),
+          ),
         );
-        // TODO calculate total of size and count
 
         // Create thumbnails
         const thumbnailChildren = thumbnails.map((item, index) => {
-          item.select = () => {
-            let newThumbnails = thumbnails.map((t, i) => {
-              const newThumbnail = { ...t };
-              if (item.original_name == t.original_name) {
-                newThumbnail.selected = !newThumbnail.selected;
-              }
-
-              return newThumbnail;
-            });
-
-            setThumbnails(newThumbnails);
-          };
-
           return preact.h(Thumbnail, {
             key: index,
             thumbnail_name: item.thumbnail_name,
             item: item,
+            selected: item.selected,
+            focused: index === currentIndex,
+            onOpen: () => openImage(index),
+            onToggleSelect: () => toggleSelectAtIndex(index),
           });
         });
 
@@ -153,8 +221,9 @@
           "img",
           {
             id: "main-image",
+            src: mainSrc || "",
             style: {
-              display: "none",
+              display: mainSrc ? "block" : "none",
               position: "fixed",
               top: "50%",
               left: "50%",
@@ -162,7 +231,9 @@
               maxWidth: "95vw",
               maxHeight: "95vh",
               zIndex: "1000",
+              cursor: "pointer",
             },
+            onclick: () => setCurrentIndex(-1),
           },
           null,
         );
@@ -177,7 +248,9 @@
       }
 
       function Thumbnail(props) {
-        const [selected, setSelected] = preactHooks.useState(false);
+        // local state removed; use props.item.selected instead
+        const selected = props.selected;
+        const focused = props.focused;
 
         thumbnailImage = preact.h("div", {
           className: "thumbnail",
@@ -189,7 +262,7 @@
             height: `${props.item.height}px`,
             display: "inline-block",
           },
-          onclick: () => displayImage(props.item.original_name),
+          onclick: () => props.onOpen(),
         });
 
         thumbnailBox = preact.h(
@@ -201,6 +274,8 @@
               fontSize: "12px",
               marginBottom: "10px",
               backgroundColor: selected ? "#dd8c8c" : "",
+              border: focused ? "2px solid #2b7be9" : "1px solid #ccc",
+              padding: "4px",
             },
           },
           thumbnailImage,
@@ -210,12 +285,13 @@
             "div",
             {
               style: { cursor: "pointer" },
-              onclick: () => {
-                setSelected(!selected);
-                props.item.select();
+              onclick: (e) => {
+                // stop click bubbling so opening image doesn't happen
+                e.stopPropagation();
+                props.onToggleSelect();
               },
             },
-            "Select",
+            selected ? "Deselect" : "Select",
           ),
         );
 

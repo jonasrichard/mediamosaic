@@ -1,8 +1,7 @@
 use std::{fs::File, sync::Arc};
 
 use axum::{
-    Router,
-    routing::{get, post},
+    Router, response::Redirect, routing::{get, post}
 };
 use log::info;
 use scanner::handler::{self, SyncCommand};
@@ -50,6 +49,10 @@ async fn main() {
     });
 
     let app = Router::new()
+        .route(
+            "/",
+            get(|| async { Redirect::permanent("/serve/") }),
+        )
         .route(
             "/sync/{*path}",
             get({
