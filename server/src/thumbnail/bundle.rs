@@ -1,10 +1,10 @@
-use std::{path::PathBuf, time::Instant};
+use std::{ffi::OsString, path::PathBuf, time::Instant};
 
 use image::RgbImage;
 use log::debug;
 use serde::{Deserialize, Serialize};
 
-use super::{directory::Directory, image::Image};
+use crate::{scanner::directory::Directory, thumbnail::image::Image};
 
 pub struct ImageBundle<'dir> {
     id: u32,
@@ -102,7 +102,7 @@ impl<'dir> ImageBundle<'dir> {
         debug!("Saved {:?}", start.elapsed());
     }
 
-    pub fn extract_metadata(&self, id: u32) -> Option<Thumbnail> {
+    pub fn extract_metadata(&self, id: &OsString) -> Option<Thumbnail> {
         let mut offset_x = 0u32;
 
         for (i, image) in self.images.iter().enumerate() {
@@ -110,7 +110,7 @@ impl<'dir> ImageBundle<'dir> {
                 offset_x += image.width;
             }
 
-            if image.id == id {
+            if image.id == *id {
                 return Some(Thumbnail {
                     absolute_base_path: self.absolute_path.to_str().unwrap().to_owned(),
                     relative_base_path: self.relative_path.to_str().unwrap().to_owned(),

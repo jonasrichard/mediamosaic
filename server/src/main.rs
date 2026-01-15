@@ -1,14 +1,19 @@
 use std::{fs::File, sync::Arc};
 
 use axum::{
-    Router, response::Redirect, routing::{get, post}
+    Router,
+    response::Redirect,
+    routing::{get, post},
 };
 use log::info;
-use scanner::handler::{self, SyncCommand};
 use serde::Deserialize;
 use tokio::{net::TcpListener, sync::mpsc};
 
+use crate::api::SyncCommand;
+
+mod api;
 mod scanner;
+mod thumbnail;
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -40,7 +45,7 @@ async fn main() {
     let (cmd_tx, cmd_rx) = mpsc::channel(16);
 
     tokio::spawn(async move {
-        scanner::handler::sync_directory(cmd_rx).await;
+        api::sync_directory(cmd_rx).await;
     });
 
     let state = Arc::new(AppState {
@@ -49,36 +54,33 @@ async fn main() {
     });
 
     let app = Router::new()
-        .route(
-            "/",
-            get(|| async { Redirect::permanent("/serve/") }),
-        )
+        .route("/", get(|| async { Redirect::permanent("/serve/") }))
         .route(
             "/sync/{*path}",
             get({
                 let shared_state = Arc::clone(&state);
-                move |path| handler::directory_sync_handler(path, shared_state)
+                move |path| api::directory_sync_handler(path, shared_state)
             }),
         )
         .route(
             "/serve{*path}",
             get({
                 let shared_state = Arc::clone(&state);
-                move |path| handler::serve_content(path, shared_state)
+                move |path| api::serve_content(path, shared_state)
             }),
         )
         .route(
             "/delete/{*path}",
             get({
                 let shared_state = Arc::clone(&state);
-                move |path| scanner::handler::delete_image(path, shared_state)
+                move |path| api::delete_image(path, shared_state)
             }),
         )
         .route(
             "/delete",
             post({
                 let shared_state = Arc::clone(&state);
-                move |body| scanner::handler::delete_images(shared_state, body)
+                move |body| api::delete_images(shared_state, body)
             }),
         );
 
@@ -91,8 +93,21 @@ async fn main() {
 
 fn read_config() -> Config {
     let cfg_file = std::fs::read_to_string("mosaic.toml").expect("Cannot find mosaic.toml");
+    let mut config: Config = toml::from_str(&cfg_file).expect("Error parsing mosaic.toml");
 
-    toml::from_str(&cfg_file).expect("Error parsing mosaic.toml")
+    let mut args = std::env::args();
+
+    while let Some(arg) = args.next() {
+        if arg == "--path"
+            && let Some(path) = args.next()
+        {
+            info!("Use {path} as root directory");
+
+            config.root_directory = path;
+        }
+    }
+
+    config
 }
 
 fn init_logger(logfile: &str) {

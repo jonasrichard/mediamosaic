@@ -1,16 +1,17 @@
 use std::{
+    ffi::OsString,
     fs::DirEntry,
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     time::Instant,
 };
 
-use image::{DynamicImage, ImageDecoder, ImageReader, RgbImage};
+use image::{DynamicImage, ImageDecoder, ImageReader, RgbImage, buffer::ConvertBuffer};
 use log::debug;
 
 #[derive(Debug)]
 pub struct Image {
-    pub id: u32,
+    pub id: OsString,
     pub file_path: PathBuf,
     pub width: u32,
     pub height: u32,
@@ -19,12 +20,12 @@ pub struct Image {
 }
 
 impl Image {
-    pub fn from_path(entry: &DirEntry, id: u32) -> Self {
+    pub fn from_path(entry: &DirEntry) -> Self {
         let path = entry.path();
         let thumbnail = Image::create_thumbnail(&path);
 
         Image {
-            id,
+            id: path.file_name().unwrap().to_os_string(),
             file_path: path,
             width: thumbnail.width(),
             height: thumbnail.height(),
@@ -47,12 +48,14 @@ impl Image {
 
         let thumb = img.thumbnail(256, 256);
 
-        if let DynamicImage::ImageRgb8(rgb_image) = thumb {
-            debug!("{:?} {:?}", path.as_ref(), start.elapsed());
+        debug!("{:?} {:?}", path.as_ref(), start.elapsed());
 
-            return rgb_image;
+        match thumb {
+            DynamicImage::ImageLuma8(gray_image) => gray_image.convert(),
+            DynamicImage::ImageRgb8(rgb_image) => rgb_image,
+            _ => {
+                panic!("Image is not an RGB8 image");
+            }
         }
-
-        panic!("Image is not an RGB8 image");
     }
 }

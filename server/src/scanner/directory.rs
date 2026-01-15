@@ -6,8 +6,9 @@ use std::{
 };
 
 use log::debug;
+use rayon::prelude::*;
 
-use super::{bundle::ImageBundle, image::Image};
+use crate::thumbnail::{bundle::ImageBundle, image::Image};
 
 pub struct ScannerContext {
     /// The directory which is the root of the whole application.
@@ -47,7 +48,6 @@ impl ScannerContext {
     }
 
     pub fn scan(&self, path: impl AsRef<Path>) -> Directory {
-        let mut images = Vec::new();
         let abs_path = self.to_absolute_path(&path);
 
         let mut entries: Vec<_> = abs_path.read_dir().unwrap().map(Result::unwrap).collect();
@@ -56,19 +56,16 @@ impl ScannerContext {
             e1.file_name().partial_cmp(&e2.file_name()).unwrap()
         });
 
-        let mut id = 1u32;
+        // TODO Here we need to check if file mtime > related thumbnail file mtime
+        let images = entries
+            .par_iter()
+            .filter(|e| Directory::is_image(e))
+            .map(|entry| {
+                debug!("{entry:?}");
 
-        for entry in &entries {
-            debug!("{entry:?}, {}", entry.path().ends_with("jpg"));
-
-            // TODO
-            // Here we need to check if file mtime > related thumbnail file mtime
-            if Directory::is_image(entry) {
-                images.push(Image::from_path(entry, id));
-
-                id += 1;
-            }
-        }
+                Image::from_path(entry)
+            })
+            .collect();
 
         debug!(
             "Create directory with absolute_path: {abs_path:?} and relative_path: {:?}",
@@ -89,10 +86,10 @@ impl ScannerContext {
 
 impl Directory {
     pub fn is_image(entry: &DirEntry) -> bool {
-        if entry.file_type().unwrap().is_file() {
-            if let Some(ext) = entry.path().extension() {
-                return ext == "jpg";
-            }
+        if entry.file_type().unwrap().is_file()
+            && let Some(ext) = entry.path().extension()
+        {
+            return ext.eq_ignore_ascii_case("jpg");
         }
 
         false
@@ -112,7 +109,7 @@ impl Directory {
 
         for image in &self.images {
             for bundle in bundles {
-                if let Some(t) = bundle.extract_metadata(image.id) {
+                if let Some(t) = bundle.extract_metadata(&image.id) {
                     thumbnails.push(t);
                 }
             }

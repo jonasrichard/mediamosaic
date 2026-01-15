@@ -12,10 +12,8 @@ use tokio::sync::mpsc;
 
 use crate::{
     AppState,
-    scanner::{
-        bundle::{ImageBundle, Thumbnail},
-        directory::ScannerContext,
-    },
+    scanner::directory::ScannerContext,
+    thumbnail::bundle::{ImageBundle, Thumbnail},
 };
 
 #[derive(Debug)]
@@ -165,7 +163,7 @@ pub async fn delete_images(
         let mut current_dir = None;
 
         for file in &files_to_delete {
-            let full_path = base_path.join(&file);
+            let full_path = base_path.join(file);
 
             if current_dir.is_none() {
                 current_dir = full_path.parent().map(|p| p.to_path_buf());
@@ -283,7 +281,13 @@ fn list_directory(base: &std::path::Path, dir: &std::path::Path) -> Response<Bod
 fn serve_file(path: &std::path::Path) -> Response<Body> {
     let mut response = Response::builder();
 
-    response = match path.extension().unwrap().to_str().unwrap() {
+    response = match path
+        .extension()
+        .unwrap()
+        .to_ascii_lowercase()
+        .to_str()
+        .unwrap()
+    {
         "jpg" => response.header("Content-Type", "image/jpeg"),
         "jpeg" => response.header("Content-Type", "image/jpeg"),
         "json" => response.header("Content-Type", "application/json"),
