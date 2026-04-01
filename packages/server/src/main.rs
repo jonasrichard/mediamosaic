@@ -6,14 +6,13 @@ use axum::{
     routing::{get, post},
 };
 use log::info;
+use mosaic_media::{scanner, thumbnail};
 use serde::Deserialize;
 use tokio::{net::TcpListener, sync::mpsc};
 
 use crate::api::SyncCommand;
 
 mod api;
-mod scanner;
-mod thumbnail;
 
 #[derive(Deserialize)]
 pub struct Config {

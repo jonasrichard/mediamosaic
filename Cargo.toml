@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = [
+    "packages/media",
+    "packages/server",
+    "packages/web",
+]
+
+[workspace.dependencies]
+mosaic-media = { path = "packages/media", version = "0.0.1" }
+mosaic-web = { path = "packages/web", version = "0.1.0" }
+
+env_logger = "0.11.8"
+log = "0.4.27"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.142"
