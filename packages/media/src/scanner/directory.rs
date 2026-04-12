@@ -10,11 +10,6 @@ use rayon::prelude::*;
 
 use crate::thumbnail::{bundle::ImageBundle, image::Image};
 
-pub struct ScannerContext {
-    /// The directory which is the root of the whole application.
-    pub base_dir: PathBuf,
-}
-
 pub struct Directory {
     pub id: u32,
     pub absolute_path: PathBuf,
@@ -25,74 +20,53 @@ pub struct Directory {
     pub images: Vec<Image>,
 }
 
-impl ScannerContext {
-    pub fn new(root_dir: impl AsRef<Path>) -> Self {
-        Self {
-            base_dir: root_dir.as_ref().to_path_buf(),
+impl Directory {
+    pub fn new(system_base_dir: impl AsRef<Path>, root_dir: impl AsRef<Path>) -> Self {
+        let base_dir = root_dir.as_ref().to_path_buf();
+        let relative_path = crate::scanner::to_relative_path(system_base_dir, &base_dir);
+
+        Directory {
+            id: 0,
+            absolute_path: base_dir,
+            relative_path: relative_path,
+            file_count: 0,
+            total_size: 0,
+            scanned_at: Instant::now(),
+            images: vec![],
         }
     }
 
-    pub fn to_relative_path(&self, path: impl AsRef<Path>) -> PathBuf {
-        path.as_ref()
-            .strip_prefix(&self.base_dir)
-            .expect("Path is outside of base dir")
-            .to_path_buf()
-    }
-
-    pub fn to_absolute_path(&self, path: impl AsRef<Path>) -> PathBuf {
-        if path.as_ref().is_absolute() {
-            self.base_dir.join(path.as_ref().strip_prefix("/").unwrap())
-        } else {
-            self.base_dir.join(path)
-        }
-    }
-
-    pub fn scan(&self, path: impl AsRef<Path>) -> Directory {
-        let abs_path = self.to_absolute_path(&path);
-
-        let mut entries: Vec<_> = abs_path.read_dir().unwrap().map(Result::unwrap).collect();
+    /// List all image files in the directory, and sort them by name.
+    pub fn list_images(&self) -> Vec<DirEntry> {
+        let mut entries = self
+            .absolute_path
+            .read_dir()
+            .unwrap()
+            .map(Result::unwrap)
+            .filter(|e| crate::scanner::is_image(e))
+            .collect::<Vec<_>>();
 
         entries.sort_by(|e1: &DirEntry, e2: &DirEntry| {
             e1.file_name().partial_cmp(&e2.file_name()).unwrap()
         });
-
-        // TODO Here we need to check if file mtime > related thumbnail file mtime
-        let images = entries
-            .par_iter()
-            .filter(|e| Directory::is_image(e))
-            .map(|entry| {
-                debug!("{entry:?}");
-
-                Image::from_path(entry)
-            })
-            .collect();
-
-        debug!(
-            "Create directory with absolute_path: {abs_path:?} and relative_path: {:?}",
-            path.as_ref()
-        );
-
-        Directory {
-            id: 0,
-            absolute_path: abs_path,
-            relative_path: path.as_ref().to_path_buf(),
-            file_count: 0,
-            total_size: 0,
-            scanned_at: Instant::now(),
-            images,
-        }
+        entries
     }
-}
 
-impl Directory {
-    pub fn is_image(entry: &DirEntry) -> bool {
-        if entry.file_type().unwrap().is_file()
-            && let Some(ext) = entry.path().extension()
-        {
-            return ext.eq_ignore_ascii_case("jpg");
-        }
+    /// Read image file and create thumbnail for it.
+    pub fn read_image(&self, entry: &DirEntry) -> Image {
+        debug!("Creating thumbnail for entry: {:?}", entry.path());
 
-        false
+        Image::from_path(entry)
+    }
+
+    /// Read all image files in the directory, and create thumbnails for them in parallel.
+    pub fn read_par_images(&mut self, images: Vec<DirEntry>) {
+        self.images = images
+            .par_iter()
+            .map(|entry| self.read_image(entry))
+            .collect();
+        self.file_count = self.images.len() as u32;
+        self.total_size = self.images.iter().map(|img| img.size).sum();
     }
 
     // TODO

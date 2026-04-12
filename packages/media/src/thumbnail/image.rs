@@ -38,7 +38,7 @@ impl Image {
     // We need to follow a different method. We need to read the images, apply orientation,
     // and get the dimensions, create thumbnail and start to collect them into different
     // bundles.
-    pub fn create_thumbnail(path: impl AsRef<Path>) -> RgbImage {
+    fn create_thumbnail(path: impl AsRef<Path>) -> RgbImage {
         let start = Instant::now();
         let mut decoder = ImageReader::open(&path).unwrap().into_decoder().unwrap();
         let orientation = decoder.orientation().unwrap();

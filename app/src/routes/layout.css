@@ -1,1 +1,30 @@
-@import 'tailwindcss';
+@import url('https://fonts.googleapis.com/css2?family=Audiowide&family=Average+Sans&family=Roboto&display=swap');
+
+:root {
+    --background-color: #292524;
+    --border-color: #463940;
+    --navbar-link-color: #9f9596;
+    --navbar-link-hover-color: #dcd6d6; 
+    --navbar-link-selected-background: #463940;
+    --link-color: #9f9596;
+    --text-color: #e0d9d9;
+}
+
+body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+    font-family: 'Roboto', 'Average Sans', 'Audiowide', sans-serif;
+    margin: 0;
+}
+
+img.icon {
+    width: 1em;
+    height: 1em;
+    vertical-align: middle;
+    filter: invert(100%);
+}
+
+a {
+    color: var(--link-color);
+    text-decoration: none;
+}

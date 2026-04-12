@@ -106,10 +106,6 @@ impl<'dir> ImageBundle<'dir> {
         let mut offset_x = 0u32;
 
         for (i, image) in self.images.iter().enumerate() {
-            if i != 0 {
-                offset_x += image.width;
-            }
-
             if image.id == *id {
                 return Some(Thumbnail {
                     absolute_base_path: self.absolute_path.to_str().unwrap().to_owned(),
@@ -128,6 +124,8 @@ impl<'dir> ImageBundle<'dir> {
                     file_size: image.size as u32,
                 });
             }
+
+                offset_x += image.width;
         }
 
         None

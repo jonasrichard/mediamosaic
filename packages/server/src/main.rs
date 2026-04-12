@@ -6,11 +6,9 @@ use axum::{
     routing::{get, post},
 };
 use log::info;
-use mosaic_media::{scanner, thumbnail};
+use mosaic_media::thumbnail;
 use serde::Deserialize;
-use tokio::{net::TcpListener, sync::mpsc};
-
-use crate::api::SyncCommand;
+use tokio::net::TcpListener;
 
 mod api;
 
@@ -23,7 +21,6 @@ pub struct Config {
 }
 
 pub struct AppState {
-    pub command_tx: mpsc::Sender<SyncCommand>,
     pub config: Config,
 }
 
@@ -36,38 +33,18 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() {
-    let config = read_config();
+    let config = read_args();
 
     init_logger(&config.logfile);
 
     let bind_addr = format!("0.0.0.0:{}", config.port);
-    let (cmd_tx, cmd_rx) = mpsc::channel(16);
-
-    tokio::spawn(async move {
-        api::sync_directory(cmd_rx).await;
-    });
 
     let state = Arc::new(AppState {
-        command_tx: cmd_tx,
         config,
     });
 
     let app = Router::new()
         .route("/", get(|| async { Redirect::permanent("/serve/") }))
-        .route(
-            "/sync/{*path}",
-            get({
-                let shared_state = Arc::clone(&state);
-                move |path| api::directory_sync_handler(path, shared_state)
-            }),
-        )
-        .route(
-            "/serve{*path}",
-            get({
-                let shared_state = Arc::clone(&state);
-                move |path| api::serve_content(path, shared_state)
-            }),
-        )
         .route(
             "/delete/{*path}",
             get({
@@ -82,28 +59,49 @@ async fn main() {
                 move |body| api::delete_images(shared_state, body)
             }),
         );
+    let app = api::routes(app, Arc::clone(&state));
 
     let listener = TcpListener::bind(bind_addr).await.unwrap();
 
-    info!("Starting HTTP serve on :3000");
+    info!("Starting HTTP serve on :{}", state.config.port);
 
     axum::serve(listener, app).await.unwrap();
 }
 
-fn read_config() -> Config {
-    let cfg_file = std::fs::read_to_string("mosaic.toml").expect("Cannot find mosaic.toml");
-    let mut config: Config = toml::from_str(&cfg_file).expect("Error parsing mosaic.toml");
-
+fn read_args() -> Config {
+    let mut serve_path = None;
+    let mut config_path = Some("mosaic.toml".to_string());
     let mut args = std::env::args();
 
     while let Some(arg) = args.next() {
-        if arg == "--path"
-            && let Some(path) = args.next()
-        {
-            info!("Use {path} as root directory");
-
-            config.root_directory = path;
+        match arg.as_str() {
+            "--config" => {
+                if let Some(arg) = args.next() {
+                    config_path = Some(arg);
+                } else {
+                    eprintln!("Expected argument after --config");
+                    std::process::exit(1);
+                }
+            }
+            "--path" => {
+                if let Some(arg) = args.next() {
+                    serve_path = Some(arg);
+                } else {
+                    eprintln!("Expected argument after --path");
+                    std::process::exit(1);
+                }
+            }
+            _ => {}
         }
+    }
+
+    println!("Reading config from: {}", config_path.as_ref().unwrap());
+
+    let cfg_file = std::fs::read_to_string(config_path.unwrap()).expect("Cannot find mosaic.toml");
+    let mut config: Config = toml::from_str(&cfg_file).expect("Error parsing mosaic.toml");
+
+    if serve_path.is_some() {
+        config.root_directory = serve_path.unwrap();
     }
 
     config

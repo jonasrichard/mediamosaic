@@ -5,67 +5,45 @@ use std::{
     sync::Arc,
 };
 
-use axum::{Json, body::Body, extract, response::Response};
+use axum::{Json, Router, body::Body, extract, response::Response, routing::get};
 use http::{HeaderValue, header};
 use log::{debug, info};
-use tokio::sync::mpsc;
 
-use crate::{
-    AppState,
-    scanner::directory::ScannerContext,
-    thumbnail::bundle::{ImageBundle, Thumbnail},
-};
+use crate::{AppState, thumbnail::bundle::Thumbnail};
 
-#[derive(Debug)]
-pub enum SyncCommand {
-    /// Sync the images in the directory. The first is the root path and the
-    /// second is the relative path inside the root.
-    SyncDirectory(PathBuf, String),
-}
+pub mod directory;
+pub mod file;
 
-pub async fn sync_directory(mut commands: mpsc::Receiver<SyncCommand>) {
-    while let Some(command) = commands.recv().await {
-        debug!("Sync command: {command:?}");
-
-        let SyncCommand::SyncDirectory(base_dir, relative_dir) = command;
-        let context = ScannerContext::new(&base_dir);
-
-        let directory = context.scan(relative_dir);
-        let bundles = ImageBundle::from_directory(&directory);
-
-        debug!("{} bundles created", bundles.len());
-
-        directory.save(&bundles);
-    }
-}
-
-pub async fn directory_sync_handler(
-    extract::Path(dir): extract::Path<String>,
-    state: Arc<AppState>,
-) {
-    debug!("Request to sync dir {dir}");
-
-    let context = ScannerContext::new(&state.config.root_directory);
-    let full_path = context.to_absolute_path(&dir);
-
-    if full_path.join("bundles.json").exists() {
-        let entries = full_path.read_dir().unwrap();
-
-        for entry in entries {
-            let entry2 = entry.unwrap();
-            let name = entry2.file_name();
-
-            if name == "bundles.json" || name.to_str().unwrap().starts_with("thumbs") {
-                std::fs::remove_file(entry2.path()).expect("Cannot remove file");
-            }
-        }
-    }
-
-    state
-        .command_tx
-        .send(SyncCommand::SyncDirectory(context.base_dir, dir))
-        .await
-        .expect("Failed to send internal command");
+pub fn routes(router: Router<()>, state: Arc<AppState>) -> Router<()> {
+    router
+        .route(
+            "/directory{*path}",
+            get({
+                let shared_state = Arc::clone(&state);
+                move |path| directory::list_directory_handler(path, shared_state)
+            }),
+        )
+        .route(
+            "/directory/thumbnail{*path}",
+            get({
+                let shared_state = Arc::clone(&state);
+                move |path| directory::create_thumbnails_handler(path, shared_state)
+            }),
+        )
+        .route(
+            "/info{*path}",
+            get({
+                let shared_state = Arc::clone(&state);
+                move |path| directory::info_handler(path, shared_state)
+            }),
+        )
+        .route(
+            "/file/serve{*path}",
+            get({
+                let shared_state = Arc::clone(&state);
+                move |path| file::serve_file(path, shared_state)
+            }),
+        )
 }
 
 pub async fn serve_content(
@@ -196,7 +174,12 @@ pub async fn delete_images(
 fn update_bundles_file(bundles_path: &PathBuf, dirs_to_delete: &Vec<String>) {
     info!("Updating bundles file: {bundles_path:?}");
 
-    let content = std::fs::read_to_string(bundles_path).unwrap();
+    let content = if let Ok(c) = std::fs::read_to_string(bundles_path) {
+        c
+    } else {
+        info!("  No bundles file found, skipping update");
+        return;
+    };
     let thumbnails: Vec<Thumbnail> = serde_json::from_str(&content).unwrap();
 
     let mut new_thumbnails = vec![];
@@ -278,7 +261,7 @@ fn list_directory(base: &std::path::Path, dir: &std::path::Path) -> Response<Bod
     Response::builder().body(body).unwrap()
 }
 
-fn serve_file(path: &std::path::Path) -> Response<Body> {
+pub fn serve_file(path: &std::path::Path) -> Response<Body> {
     let mut response = Response::builder();
 
     response = match path
@@ -297,4 +280,18 @@ fn serve_file(path: &std::path::Path) -> Response<Body> {
     let content = std::fs::read(path).unwrap();
 
     response.body(content.into()).unwrap()
+}
+
+/// Convert a relative path to an absolute path based on the root directory.
+pub fn relative_to_absolute_path(root: &str, relative: &str) -> PathBuf {
+    let mut path = PathBuf::from(root);
+
+    let relative_path = if relative.starts_with("/") {
+        relative.strip_prefix("/").unwrap()
+    } else {
+        relative
+    };
+
+    path.push(relative_path);
+    path
 }
