@@ -4,7 +4,7 @@
 	import { bytesToKB } from '$lib/util';
 	import dustbinIcon from '$lib/assets/dustbin.png';
 
-    let { thumbnails }: { thumbnails: Thumbnail[] } = $props();
+    let { thumbnails = $bindable() }: { thumbnails: Thumbnail[] } = $props();
 	let selectedCount = $derived.by(() => thumbnails.filter((t: Thumbnail) => t.selected).length);
 	let selectedSize = $derived.by(() => thumbnails.filter((t: Thumbnail) => t.selected).reduce((sum, t) => sum + t.fileSize, 0));
 	let totalSize = $derived.by(() => thumbnails.reduce((sum, t) => sum + t.fileSize, 0));
@@ -68,7 +68,9 @@
 		background-color: #1f1b1b;
 		border: 1px solid var(--border-color);
 		display: flex;
+		flex-direction: row;
 		gap: 0.5em;
+		justify-content: space-between;
 		padding: 0.5em;
 		position: sticky;
 		top: 0;
@@ -102,16 +104,20 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div class="toolbar">
-	{#if selectedCount > 0}
+	<div>
 		<span>{selectedCount} selected ({bytesToKB(selectedSize)})</span>
-	{/if}
+		<a
+			href="/"
+			style:margin-left="1em"
+			onclick={(e) => { e.preventDefault(); deleteSelected(); }}>
+			<img src={dustbinIcon} alt="Delete selected" class="icon" /> Delete selected...
+		</a>
+	</div>
 
-    <a href="/" onclick={
-		(e) => { e.preventDefault(); deleteSelected(); }
-		}><img src={dustbinIcon} alt="Delete selected" class="icon" /> Delete selected...</a>
-
-	Total images: {thumbnails.length},
-	Total size: {bytesToKB(totalSize)}
+	<div>
+		Total images: {thumbnails.length},
+		Total size: {bytesToKB(totalSize)}
+	</div>
 </div>
 
 <div id="main-image-container" style:display={mainImageSrc ? 'block' : 'none'}>
@@ -130,7 +136,7 @@
         />
     </a>
 	{#if selectedIndex >= 0}
-		{thumbnails[selectedIndex].originalName} ({thumbnails[selectedIndex].fileSize} bytes)
+		{thumbnails[selectedIndex].originalName} ({bytesToKB(thumbnails[selectedIndex].fileSize)})
 	{/if}
 </div>
 

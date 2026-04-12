@@ -12,7 +12,7 @@
 	let entries = $state([] as DirectoryEntry[]);
 
 	let hasThumbnails = $state(false);
-	let generatedThumbnails = $state(false);
+	let generateThumbnails = $state(false);
 
 	function mapDirectoryEntry(item: any): DirectoryEntry {
 		return {
@@ -81,29 +81,30 @@
 	});
 
 	$effect(() => {
-		if (generatedThumbnails) {
+		if (generateThumbnails) {
 			fetch(`/api/directory/thumbnail/${path}`)
 				.then((res) => res.text())
 				.then((data) => {
 					console.log(data);
-					generatedThumbnails = false;
+					generateThumbnails = false;
+					// Re-fetch info to get the newly generated thumbnails
+					fetch(`/api/info${path}`).then(res => res.json()).then(data => {
+						thumbnails = data.map(mapThumbnail).sort((a: Thumbnail, b: Thumbnail) => a.originalName.localeCompare(b.originalName));
+						hasThumbnails = true;
+					});
 				})
 				.catch((err) => {
 					console.error('Error generating thumbnails:', err);
-					generatedThumbnails = false;
+					generateThumbnails = false;
 				});
 		}
 	});
 </script>
 
-<Breadcrumb path={path} />
+<Breadcrumb path={path} bind:generateThumbnails/>
 
 {#if hasThumbnails}
-	<ImageGrid {thumbnails} />
+	<ImageGrid bind:thumbnails />
 {:else}
-	<button
-		onclick={() => {
-			generatedThumbnails = true;
-		}}>Generate thumbnails</button>
 	<Directory containingPath={path} {entries} />
 {/if}

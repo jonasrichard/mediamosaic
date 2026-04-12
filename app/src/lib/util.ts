@@ -1,5 +1,9 @@
 export function bytesToKB(bytes: number): string {
-    return (bytes / 1024).toFixed(2) + " KB";
+    return formatNumberWithCommas((bytes / 1024).toFixed(2)) + " KB";
+}
+
+export function formatNumberWithCommas(num: string): string {
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 export function joinPaths(...paths: string[]): string {

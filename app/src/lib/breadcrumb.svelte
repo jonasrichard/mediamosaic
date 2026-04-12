@@ -1,5 +1,7 @@
 <script lang="ts">
-    let { path } = $props();
+	import wrenchIcon from '$lib/assets/wrench-tool.png';
+
+    let { generateThumbnails = $bindable(), path } = $props();
 
 	function breadcrumbs() {
 		const parts = path.split('/').filter((p: any) => p);
@@ -16,6 +18,8 @@
 <style>
 	#breadcrumb {
 		border: 1px solid var(--border-color);
+		display: flex;
+		justify-content: space-between;
 		font-size: 0.9em;
 		padding: 1em;
 	}
@@ -29,8 +33,16 @@
 </style>
 
 <div id="breadcrumb">
-	<a href="/directory">Root</a> / 
-	{#each breadcrumbs() as crumb, index}
-		<a href={`/directory${crumb.path}`}>{crumb.name}</a>{index < breadcrumbs().length - 1 ? ' / ' : ''}
-	{/each}
+	<div>
+		<a href="/directory">Root</a> / 
+		{#each breadcrumbs() as crumb, index}
+			<a href={`/directory${crumb.path}`}>{crumb.name}</a>{index < breadcrumbs().length - 1 ? ' / ' : ''}
+		{/each}
+	</div>
+	<div>
+		<a href="/" onclick={(e) => { e.preventDefault(); generateThumbnails = true; }}>
+			<img src={wrenchIcon} alt="Generate thumbnails" class="icon" />
+			Generate thumbnails
+		</a>
+	</div>
 </div>

@@ -34,8 +34,7 @@
 	}
 </style>
 
-<div class="thumbnail-container"
-	style:border={thumbnail.selected ? '2px solid red' : '1px solid gray'}>
+<div class="thumbnail-container">
 	<a
 		href={`/api/file/serve/${thumbnail.relativeBasePath}/${thumbnail.originalName}`}
 		aria-label="View {thumbnail.originalName}"
@@ -55,7 +54,11 @@
 			style:height="{thumbnail.height}px"
 		></div>
 	</a>
-	<div style:padding-top="0.5em">{thumbnail.originalName.slice(-10)} ({bytesToKB(thumbnail.fileSize)})</div>
+	<div
+		style:color={thumbnail.selected ? '#ff7e5f' : ''}
+		style:padding-top="0.5em">
+		{thumbnail.originalName.slice(-10)} ({bytesToKB(thumbnail.fileSize)})
+	</div>
 	<div>
 		<a
 			aria-label="Select {thumbnail.originalName}"
