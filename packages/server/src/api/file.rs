@@ -6,6 +6,18 @@ use log::info;
 
 use crate::AppState;
 
+#[utoipa::path(
+    get,
+    path = "/file/serve/{path}",
+    params(
+        ("path" = String, Path, description = "Relative file path to serve")
+    ),
+    responses(
+        (status = 200, description = "File content returned"),
+        (status = 400, description = "Path points to a directory", body = String)
+    ),
+    tag = "media"
+)]
 pub async fn serve_file(
     extract::Path(file): extract::Path<String>,
     state: Arc<AppState>,

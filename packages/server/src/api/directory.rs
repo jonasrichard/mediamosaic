@@ -1,5 +1,7 @@
-use axum::{Json, extract, http::StatusCode, response::{IntoResponse, Response}};
-use axum::body::Body;
+use axum::{
+    Json, extract,
+    response::{IntoResponse, Response},
+};
 use log::{debug, info};
 use mosaic_media::{
     scanner::{self, directory::Directory},
@@ -7,15 +9,27 @@ use mosaic_media::{
 };
 use serde::Serialize;
 use std::sync::Arc;
+use utoipa::ToSchema;
 
 use crate::AppState;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct DirectoryEntry {
     name: String,
     entry_type: String,
 }
 
+#[utoipa::path(
+    get,
+    path = "/directory/{path}",
+    params(
+        ("path" = String, Path, description = "Relative directory path")
+    ),
+    responses(
+        (status = 200, description = "Directory entries", body = [DirectoryEntry])
+    ),
+    tag = "media"
+)]
 pub async fn list_directory_handler(
     extract::Path(dir): extract::Path<String>,
     state: Arc<AppState>,
@@ -27,16 +41,14 @@ pub async fn list_directory_handler(
 
     if let Ok(entries) = full_path.read_dir() {
         let result = entries
-            .map(|entry| {
-                let entry2 = entry.unwrap();
-                let name = entry2.file_name().to_string_lossy().to_string();
-                let entry_type = if entry2.path().is_dir() {
+            .map(|entry| entry.unwrap())
+            .map(|entry| DirectoryEntry {
+                name: entry.file_name().to_string_lossy().to_string(),
+                entry_type: if entry.path().is_dir() {
                     "directory".to_string()
                 } else {
                     "file".to_string()
-                };
-
-                DirectoryEntry { name, entry_type }
+                },
             })
             .collect();
 
@@ -46,6 +58,17 @@ pub async fn list_directory_handler(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/info/{path}",
+    params(
+        ("path" = String, Path, description = "Relative directory or bundle path")
+    ),
+    responses(
+        (status = 200, description = "Directory information or bundles file content")
+    ),
+    tag = "media"
+)]
 pub async fn info_handler(
     extract::Path(dir): extract::Path<String>,
     state: Arc<AppState>,
@@ -81,6 +104,17 @@ pub async fn info_handler(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/directory/thumbnail/{path}",
+    params(
+        ("path" = String, Path, description = "Relative directory path")
+    ),
+    responses(
+        (status = 200, description = "Thumbnail creation status", body = String, content_type = "text/plain")
+    ),
+    tag = "media"
+)]
 pub async fn create_thumbnails_handler(
     extract::Path(dir): extract::Path<String>,
     state: Arc<AppState>,

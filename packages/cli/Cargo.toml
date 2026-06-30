@@ -1,0 +1,9 @@
+[package]
+name = "mosaic-cli"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+env_logger = { workspace = true }
+log = { workspace = true }
+mosaic-media = { workspace = true }

@@ -20,7 +20,7 @@ pub struct Image {
 }
 
 impl Image {
-    pub fn from_path(entry: &DirEntry) -> Self {
+    pub fn load_and_thumbnail(entry: &DirEntry) -> Self {
         let path = entry.path();
         let thumbnail = Image::create_thumbnail(&path);
 

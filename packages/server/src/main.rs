@@ -9,8 +9,34 @@ use log::info;
 use mosaic_media::thumbnail;
 use serde::Deserialize;
 use tokio::net::TcpListener;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 mod api;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        api::delete_image,
+        api::delete_images,
+        api::directory::list_directory_handler,
+        api::directory::create_thumbnails_handler,
+        api::directory::info_handler,
+        api::file::serve_file
+    ),
+    components(
+        schemas(
+            api::ApiError,
+            api::ApiMessage,
+            api::DeleteImagesRequest,
+            api::directory::DirectoryEntry
+        )
+    ),
+    tags(
+        (name = "media", description = "Media mosaic API")
+    )
+)]
+struct ApiDoc;
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -39,9 +65,7 @@ async fn main() {
 
     let bind_addr = format!("0.0.0.0:{}", config.port);
 
-    let state = Arc::new(AppState {
-        config,
-    });
+    let state = Arc::new(AppState { config });
 
     let app = Router::new()
         .route("/", get(|| async { Redirect::permanent("/serve/") }))
@@ -60,6 +84,8 @@ async fn main() {
             }),
         );
     let app = api::routes(app, Arc::clone(&state));
+    let openapi = ApiDoc::openapi();
+    let app = app.merge(SwaggerUi::new("/api/docs").url("/api/openapi.json", openapi));
 
     let listener = TcpListener::bind(bind_addr).await.unwrap();
 
@@ -100,8 +126,8 @@ fn read_args() -> Config {
     let cfg_file = std::fs::read_to_string(config_path.unwrap()).expect("Cannot find mosaic.toml");
     let mut config: Config = toml::from_str(&cfg_file).expect("Error parsing mosaic.toml");
 
-    if serve_path.is_some() {
-        config.root_directory = serve_path.unwrap();
+    if let Some(root_directory) = serve_path {
+        config.root_directory = root_directory;
     }
 
     config

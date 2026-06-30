@@ -28,7 +28,7 @@ impl Directory {
         Directory {
             id: 0,
             absolute_path: base_dir,
-            relative_path: relative_path,
+            relative_path,
             file_count: 0,
             total_size: 0,
             scanned_at: Instant::now(),
@@ -43,7 +43,7 @@ impl Directory {
             .read_dir()
             .unwrap()
             .map(Result::unwrap)
-            .filter(|e| crate::scanner::is_image(e))
+            .filter(crate::scanner::is_image)
             .collect::<Vec<_>>();
 
         entries.sort_by(|e1: &DirEntry, e2: &DirEntry| {
@@ -56,7 +56,7 @@ impl Directory {
     pub fn read_image(&self, entry: &DirEntry) -> Image {
         debug!("Creating thumbnail for entry: {:?}", entry.path());
 
-        Image::from_path(entry)
+        Image::load_and_thumbnail(entry)
     }
 
     /// Read all image files in the directory, and create thumbnails for them in parallel.

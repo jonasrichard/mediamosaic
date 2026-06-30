@@ -105,7 +105,7 @@ impl<'dir> ImageBundle<'dir> {
     pub fn extract_metadata(&self, id: &OsString) -> Option<Thumbnail> {
         let mut offset_x = 0u32;
 
-        for (i, image) in self.images.iter().enumerate() {
+        for image in self.images.iter() {
             if image.id == *id {
                 return Some(Thumbnail {
                     absolute_base_path: self.absolute_path.to_str().unwrap().to_owned(),
@@ -125,7 +125,7 @@ impl<'dir> ImageBundle<'dir> {
                 });
             }
 
-                offset_x += image.width;
+            offset_x += image.width;
         }
 
         None
